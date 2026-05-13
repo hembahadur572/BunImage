@@ -65,13 +65,21 @@
     border: 2px solid #161b22;
   }
   select, input[type="number"] {
-    width: 100%; padding: 0.5rem 0.75rem; border-radius: 6px;
+    padding: 0.5rem 0.75rem; border-radius: 6px;
     border: 1px solid #30363d; background: #0d1117; color: #e6edf3;
-    font-size: 0.875rem; outline: none;
+    font-size: 0.875rem; outline: none; width: 100%;
   }
   select:focus, input[type="number"]:focus { border-color: #f778ba; }
-  .dim-row { display: flex; gap: 0.75rem; }
-  .dim-row > * { flex: 1; }
+  .dim-row { display: flex; gap: 0.75rem; align-items: stretch; }
+  .dim-row > * { flex: 1; min-width: 0; }
+  .dim-field-wrap { position: relative; }
+  .dim-field-wrap .lock-btn {
+    position: absolute; right: 0.35rem; top: 50%; transform: translateY(-50%);
+    background: none; border: none; color: #8b949e; cursor: pointer;
+    font-size: 1rem; line-height: 1; padding: 0.25rem; z-index: 1;
+  }
+  .dim-field-wrap .lock-btn.locked { color: #f778ba; }
+  .dim-field-wrap input { padding-right: 2rem; }
 
   .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
@@ -87,36 +95,75 @@
   }
   .btn-secondary:not(:disabled):hover { background: #30363d; }
 
-  /* Before/after comparison */
-  .compare {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;
-    margin-top: 1rem;
+  /* Live indicator */
+  .live-badge {
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em;
+    color: #8b949e; margin-left: auto;
   }
-  .compare-panel {
+  .live-badge .dot {
+    width: 6px; height: 6px; border-radius: 50%; background: #3fb950;
+    display: inline-block; transition: background .3s;
+  }
+  .live-badge .dot.busy { background: #f778ba; animation: pulse .8s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+  /* Comparison slider */
+  .cmp {
+    position: relative; margin-top: 1rem; user-select: none;
     background: #0d1117; border-radius: 6px; overflow: hidden;
   }
-  .compare-panel .label {
-    font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;
-    padding: 0.5rem 0.75rem; text-align: center;
-  }
-  .compare-panel .label.before { color: #58a6ff; }
-  .compare-panel .label.after { color: #3fb950; }
-  .compare-panel img {
-    width: 100%; height: 240px; object-fit: contain; display: block;
+  .cmp-img {
+    display: block; width: 100%; height: 360px; object-fit: contain;
     background: repeating-conic-gradient(#1c2128 0% 25%, transparent 0% 50%) 50%/16px 16px;
   }
+  .cmp-overlay {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    overflow: hidden;
+  }
+  .cmp-overlay img {
+    display: block; width: 100%; height: 100%; object-fit: contain;
+    background: repeating-conic-gradient(#1c2128 0% 25%, transparent 0% 50%) 50%/16px 16px;
+  }
+  .cmp-handle {
+    position: absolute; top: 0; bottom: 0; width: 3px;
+    background: #f778ba; cursor: ew-resize; z-index: 10;
+  }
+  .cmp-handle::before {
+    content: ""; position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 36px; height: 36px; border-radius: 50%;
+    background: #f778ba; border: 2px solid #0d1117;
+    box-shadow: 0 0 0 2px rgba(247,120,186,0.3);
+  }
+  .cmp-handle::after {
+    content: "\2194"; position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 16px; color: #0d1117; line-height: 1;
+    z-index: 1; pointer-events: none;
+  }
+  .cmp-label {
+    position: absolute; top: 0.5rem; padding: 0.2rem 0.5rem;
+    font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.06em;
+    border-radius: 4px; pointer-events: none; z-index: 5;
+  }
+  .cmp-label.orig {
+    left: 0.5rem; background: rgba(13,17,23,0.75); color: #58a6ff;
+  }
+  .cmp-label.comp {
+    right: 0.5rem; background: rgba(13,17,23,0.75); color: #3fb950;
+  }
 
-  /* Stats grid */
   .results-grid {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;
+    display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1rem; margin-top: 1rem;
   }
   .result-stat {
-    background: #0d1117; border-radius: 6px; padding: 0.75rem 1rem; text-align: center;
+    background: #0d1117; border-radius: 6px; padding: 0.75rem 0.5rem; text-align: center;
   }
   .result-stat .stat-label {
-    font-size: 0.75rem; color: #8b949e; text-transform: uppercase; letter-spacing: 0.05em;
+    font-size: 0.7rem; color: #8b949e; text-transform: uppercase; letter-spacing: 0.06em;
   }
-  .result-stat .stat-value { font-size: 1.25rem; font-weight: 600; margin-top: 0.25rem; }
+  .result-stat .stat-value { font-size: 1.1rem; font-weight: 600; margin-top: 0.25rem; }
   .result-stat .stat-value.good { color: #3fb950; }
   .result-stat .stat-value.bad { color: #f85149; }
   .result-stat .stat-value.info { color: #58a6ff; }
@@ -126,9 +173,6 @@
   .status { font-size: 0.875rem; color: #8b949e; text-align: center; margin-top: 1rem; }
   .status.error { color: #f85149; }
 
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #30363d; border-top-color: #f778ba; border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle; }
-
   footer {
     width: 100%; padding: 1.5rem; text-align: center;
     color: #8b949e; font-size: 0.75rem;
@@ -136,9 +180,10 @@
   }
 
   @media (max-width: 640px) {
-    .compare { grid-template-columns: 1fr; }
-    .compare-panel img { height: 180px; }
-    .results-grid { grid-template-columns: 1fr; }
+    .cmp-img { height: 240px; }
+    .results-grid { grid-template-columns: 1fr 1fr; }
+    .dim-row { flex-wrap: wrap; }
+    .dim-row > * { min-width: 80px; }
     .actions { flex-direction: column; }
   }
 </style>
@@ -167,9 +212,12 @@
     </div>
   </div>
 
-  <!-- Controls (shown after upload) -->
+  <!-- Controls -->
   <div class="card" id="controls-card" style="display:none">
-    <h2>Compression Settings</h2>
+    <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem">
+      <h2 style="margin:0">Compression Settings</h2>
+      <span class="live-badge"><span class="dot" id="live-dot"></span> Live Preview</span>
+    </div>
 
     <div class="control-group">
       <label>Format <span class="val" id="format-label">JPEG</span></label>
@@ -186,31 +234,32 @@
     </div>
 
     <div class="control-group">
-      <label>Resize (optional)</label>
+      <label>Resize <span style="font-weight:400;color:#8b949e;font-size:0.8rem">(leave blank for original)</span></label>
       <div class="dim-row">
-        <input type="number" id="resize-w" placeholder="Width" min="1" />
-        <input type="number" id="resize-h" placeholder="Height" min="1" />
+        <div class="dim-field-wrap">
+          <input type="number" id="resize-w" placeholder="Width" min="1" />
+          <button class="lock-btn" id="lock-btn" title="Lock aspect ratio">&#x1F517;</button>
+        </div>
+        <div class="dim-field-wrap">
+          <input type="number" id="resize-h" placeholder="Height" min="1" />
+        </div>
         <select id="fit">
-          <option value="inside">Fit inside (shrink)</option>
+          <option value="inside">Fit inside</option>
           <option value="fill">Fill / stretch</option>
         </select>
       </div>
     </div>
 
-    <button class="btn btn-primary" id="compress-btn" onclick="compress()">Compress</button>
-
-    <!-- Results (shown after first compression) -->
+    <!-- Comparison slider & results -->
     <div id="results-section" style="display:none">
-      <!-- Before / After comparison -->
-      <div class="compare">
-        <div class="compare-panel">
-          <div class="label before">Original</div>
-          <img id="orig-preview" alt="Original" />
+      <div class="cmp" id="cmp-container">
+        <label class="cmp-label orig">Original</label>
+        <label class="cmp-label comp">Compressed</label>
+        <img id="cmp-orig" class="cmp-img" alt="Original" />
+        <div class="cmp-overlay" id="cmp-overlay">
+          <img id="cmp-comp" alt="Compressed" />
         </div>
-        <div class="compare-panel">
-          <div class="label after">Compressed</div>
-          <img id="comp-preview" alt="Compressed" />
-        </div>
+        <div class="cmp-handle" id="cmp-handle"></div>
       </div>
 
       <div class="results-grid">
@@ -245,17 +294,26 @@
 <footer>Powered by Bun.Image &mdash; libjpeg-turbo &middot; spng &middot; libwebp &middot; Highway SIMD</footer>
 
 <script>
+// ── State ──
 var currentId = null;
 var currentName = "";
 var currentWidth = 0;
 var currentHeight = 0;
 var currentSize = 0;
 var compressedBlob = null;
-var origBlobUrl = null;
+var previewTimer = null;
+var aspectLocked = true;
 
+// DOM refs
 var dropZone = document.getElementById("drop-zone");
 var fileInput = document.getElementById("file-input");
+var cmp = document.getElementById("cmp-container");
+var cmpOrig = document.getElementById("cmp-orig");
+var cmpComp = document.getElementById("cmp-comp");
+var cmpOverlay = document.getElementById("cmp-overlay");
+var cmpHandle = document.getElementById("cmp-handle");
 
+// ── Upload ──
 dropZone.addEventListener("dragover", function(e) { e.preventDefault(); dropZone.classList.add("drag-over"); });
 dropZone.addEventListener("dragleave", function() { dropZone.classList.remove("drag-over"); });
 dropZone.addEventListener("drop", function(e) {
@@ -269,16 +327,59 @@ fileInput.addEventListener("change", function(e) {
   if (f) handleFile(f);
 });
 
-// Quality slider display
+// ── Control bindings ──
 document.getElementById("quality").addEventListener("input", function(e) {
   document.getElementById("quality-label").textContent = e.target.value;
+  schedulePreview();
 });
 document.getElementById("format").addEventListener("change", function(e) {
   var fmt = e.target.value;
   document.getElementById("format-label").textContent = fmt.toUpperCase();
   document.getElementById("quality-group").style.display = fmt === "png" ? "none" : "block";
+  schedulePreview();
 });
 
+// Resize inputs
+var rw = document.getElementById("resize-w");
+var rh = document.getElementById("resize-h");
+rw.addEventListener("input", function() { if (aspectLocked && currentWidth) autoLockH(); schedulePreview(); });
+rh.addEventListener("input", function() { schedulePreview(); });
+document.getElementById("fit").addEventListener("change", schedulePreview);
+
+// Aspect ratio lock
+var lockBtn = document.getElementById("lock-btn");
+lockBtn.addEventListener("click", function() {
+  aspectLocked = !aspectLocked;
+  lockBtn.classList.toggle("locked");
+  lockBtn.innerHTML = aspectLocked ? "&#x1F517;" : "&#x1F513;";
+});
+
+function autoLockH() {
+  var w = parseInt(rw.value);
+  if (!w || w <= 0) return;
+  // Calculate proportional height from original dimensions
+  var newH = Math.round((currentHeight / currentWidth) * w);
+  rh.value = newH;
+}
+
+// ── Comparison slider ──
+var dragging = false;
+cmpHandle.addEventListener("mousedown", function(e) { e.preventDefault(); dragging = true; });
+cmpHandle.addEventListener("touchstart", function(e) { e.preventDefault(); dragging = true; }, { passive: true });
+
+document.addEventListener("mousemove", function(e) { if (dragging) moveSplit(e.clientX); });
+document.addEventListener("touchmove", function(e) { if (dragging) moveSplit(e.touches[0].clientX); }, { passive: true });
+document.addEventListener("mouseup", function() { dragging = false; });
+document.addEventListener("touchend", function() { dragging = false; });
+
+function moveSplit(x) {
+  var rect = cmp.getBoundingClientRect();
+  var pct = Math.max(0, Math.min(1, (x - rect.left) / rect.width));
+  cmpOverlay.style.width = (pct * 100) + "%";
+  cmpHandle.style.left = (pct * 100) + "%";
+}
+
+// ── Upload handler ──
 function handleFile(file) {
   setStatus("Uploading...", false);
 
@@ -308,18 +409,27 @@ function handleFile(file) {
 
       document.getElementById("controls-card").style.display = "block";
       document.getElementById("results-section").style.display = "none";
-      setStatus("Image loaded &mdash; adjust settings and compress", false);
+      setStatus("", false);
+
+      // Auto-run first compression
+      doCompress();
     })
     .catch(function(e) {
       setStatus(e.message, true);
     });
 }
 
-function compress() {
+// ── Live preview (debounced) ──
+function schedulePreview() {
   if (!currentId) return;
-  var btn = document.getElementById("compress-btn");
-  btn.disabled = true;
-  setStatus("Compressing...", false);
+  if (previewTimer) clearTimeout(previewTimer);
+  document.getElementById("live-dot").className = "dot busy";
+  previewTimer = setTimeout(doCompress, 400);
+}
+
+function doCompress() {
+  previewTimer = null;
+  if (!currentId) return;
 
   var quality = document.getElementById("quality").value;
   var format = document.getElementById("format").value;
@@ -340,24 +450,28 @@ function compress() {
       var origSize = parseInt(res.headers.get("X-Original-Size"));
       var compSize = parseInt(res.headers.get("X-Compressed-Size"));
       var ratio = res.headers.get("X-Compression-Ratio");
+      var cw = res.headers.get("X-Compressed-Width");
+      var ch = res.headers.get("X-Compressed-Height");
       return res.blob().then(function(blob) {
-        return { blob: blob, origSize: origSize, compSize: compSize, ratio: ratio };
+        return { blob: blob, origSize: origSize, compSize: compSize, ratio: ratio, cw: cw, ch: ch };
       });
     })
     .then(function(result) {
+      // Revoke old blob URL to avoid leaks
+      if (compressedBlob) URL.revokeObjectURL(compressedBlob);
+      compressedBlob = null;
+
+      var compUrl = URL.createObjectURL(result.blob);
       compressedBlob = result.blob;
 
-      // Clean up old blob URLs
-      if (origBlobUrl) URL.revokeObjectURL(origBlobUrl);
+      // Set comparison slider images
+      cmpOrig.src = "/api/original/" + currentId;
+      cmpComp.src = compUrl;
 
-      // Show original preview (fetch fresh in case of re-compress)
-      origBlobUrl = "/api/original/" + currentId;
-      document.getElementById("orig-preview").src = origBlobUrl;
-
-      // Show compressed preview
-      var compUrl = URL.createObjectURL(result.blob);
-      document.getElementById("comp-preview").src = compUrl;
+      // Show section, reset split to 50%
       document.getElementById("results-section").style.display = "block";
+      cmpOverlay.style.width = "50%";
+      cmpHandle.style.left = "50%";
 
       // Stats
       document.getElementById("res-original").textContent = formatSize(result.origSize);
@@ -372,31 +486,32 @@ function compress() {
       svEl.className = "stat-value " + (savingsNum > 0 ? "good" : (savingsNum < 0 ? "bad" : "info"));
 
       var dimEl = document.getElementById("res-dims");
-      dimEl.textContent = currentWidth + " x " + currentHeight;
+      dimEl.textContent = (result.cw && result.ch) ? result.cw + " x " + result.ch : currentWidth + " x " + currentHeight;
 
-      setStatus("Compression complete", false);
-      btn.disabled = false;
+      document.getElementById("live-dot").className = "dot";
+      setStatus("", false);
     })
     .catch(function(e) {
+      document.getElementById("live-dot").className = "dot";
       setStatus(e.message, true);
-      btn.disabled = false;
     });
 }
 
+// ── Download ──
 function download() {
   if (!compressedBlob) return;
   var format = document.getElementById("format").value;
   var a = document.createElement("a");
   a.href = URL.createObjectURL(compressedBlob);
-  // Preserve original filename with new extension
   var base = currentName.replace(/\.[^.]+$/, "");
   a.download = base + "." + format;
   a.click();
 }
 
+// ── Reset ──
 function reset() {
-  if (origBlobUrl) { URL.revokeObjectURL(origBlobUrl); origBlobUrl = null; }
-  compressedBlob = null;
+  if (compressedBlob) { URL.revokeObjectURL(compressedBlob); compressedBlob = null; }
+  if (previewTimer) { clearTimeout(previewTimer); previewTimer = null; }
   currentId = null;
   document.getElementById("results-section").style.display = "none";
   document.getElementById("controls-card").style.display = "none";
@@ -405,9 +520,12 @@ function reset() {
   dropZone.querySelector(".icon").innerHTML = "&#x1F5BC;";
   dropZone.querySelector(".hint").innerHTML = 'Drop an image here or <label>click to browse</label>';
   fileInput.value = "";
+  rw.value = "";
+  rh.value = "";
   setStatus("", false);
 }
 
+// ── Helpers ──
 function formatSize(bytes) {
   if (bytes < 1024) return bytes + " B";
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
