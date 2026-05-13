@@ -4,6 +4,26 @@
 const store = new Map();
 let nextId = 1;
 
+// ── In-memory store with TTL ────────────────────────────────────────────────
+
+const TTL_MS = 30 * 60 * 1000; // 30 minutes
+const CLEANUP_INTERVAL = 5 * 60 * 1000; // check every 5 min
+
+function storeSet(id, entry) {
+  entry._expires = Date.now() + TTL_MS;
+  store.set(id, entry);
+}
+
+// Periodic cleanup so idle images don't leak
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, entry] of store) {
+    if (entry._expires < now) store.delete(id);
+  }
+}, CLEANUP_INTERVAL).unref();
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
@@ -23,6 +43,14 @@ function error(msg, status = 400) {
   return json({ error: msg }, status);
 }
 
+// Strip extension from a filename
+function stem(name) {
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? name.slice(0, dot) : name;
+}
+
+// ── Route handlers ───────────────────────────────────────────────────────────
+
 async function handleUpload(req) {
   const form = await req.formData();
   const file = form.get("file");
@@ -39,7 +67,7 @@ async function handleUpload(req) {
   const meta = await img.metadata();
 
   const id = "img_" + nextId++;
-  store.set(id, {
+  storeSet(id, {
     buffer,
     mime: file.type || "image/png",
     name: file.name,
@@ -71,7 +99,6 @@ async function handleCompress(id, params) {
   if (!["jpeg", "png", "webp"].includes(format)) {
     return error("Unsupported format: " + format);
   }
-
   if (!["fill", "inside"].includes(fit)) {
     return error("fit must be 'fill' or 'inside'");
   }
@@ -111,7 +138,7 @@ async function handleCompress(id, params) {
 
   const ratio = ((1 - out.length / stored.size) * 100).toFixed(1);
 
-  // Get actual output dimensions
+  // Actual output dimensions
   let compW = stored.width;
   let compH = stored.height;
   if (w || h) {
@@ -121,6 +148,9 @@ async function handleCompress(id, params) {
       compH = reMeta.height;
     } catch (_) {}
   }
+
+  // Preserve original filename with new extension
+  const downloadName = stem(stored.name) + "." + format;
 
   return new Response(out, {
     headers: {
@@ -132,7 +162,7 @@ async function handleCompress(id, params) {
       "X-Compressed-Width": String(compW),
       "X-Compressed-Height": String(compH),
       "Cache-Control": "no-store",
-      "Content-Disposition": 'attachment; filename="compressed.' + format + '"',
+      "Content-Disposition": 'attachment; filename="' + downloadName + '"',
     },
   });
 }
@@ -140,11 +170,8 @@ async function handleCompress(id, params) {
 // ── Server ──
 
 const PORT = parseInt(Bun.env.PORT || "3000");
-// Resolve directory of this script
 const scriptURL = import.meta.url;
-const scriptPath = scriptURL.startsWith("file://")
-  ? scriptURL.slice(7)
-  : scriptURL;
+const scriptPath = scriptURL.startsWith("file://") ? scriptURL.slice(7) : scriptURL;
 const dir = scriptPath.substring(0, scriptPath.lastIndexOf("/") + 1);
 
 Bun.serve({
@@ -157,16 +184,18 @@ Bun.serve({
       return new Response(null, { headers: corsHeaders() });
     }
 
-    // API routes
+    // POST /api/upload
     if (url.pathname === "/api/upload" && method === "POST") {
       return await handleUpload(req);
     }
 
+    // GET /api/compress/:id
     const compressMatch = url.pathname.match(/^\/api\/compress\/(.+)$/);
     if (compressMatch && method === "GET") {
       return await handleCompress(compressMatch[1], url.searchParams);
     }
 
+    // GET /api/info/:id
     const infoMatch = url.pathname.match(/^\/api\/info\/(.+)$/);
     if (infoMatch && method === "GET") {
       const stored = store.get(infoMatch[1]);
@@ -178,6 +207,19 @@ Bun.serve({
         height: stored.height,
         size: stored.size,
         mime: stored.mime,
+      });
+    }
+
+    // GET /api/original/:id — serve the original image (for preview comparison)
+    const origMatch = url.pathname.match(/^\/api\/original\/(.+)$/);
+    if (origMatch && method === "GET") {
+      const stored = store.get(origMatch[1]);
+      if (!stored) return error("Image not found", 404);
+      return new Response(stored.buffer, {
+        headers: {
+          "Content-Type": stored.mime,
+          "Cache-Control": "no-store",
+        },
       });
     }
 
@@ -196,4 +238,5 @@ Bun.serve({
 console.log("");
 console.log("  Bun Image Compress running at http://localhost:" + PORT);
 console.log("  Formats: JPEG, PNG, WebP | Fit: fill, inside");
+console.log("  Stored images expire after 30 min");
 console.log("");

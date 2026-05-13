@@ -24,6 +24,8 @@
     padding: 1.5rem; margin-bottom: 1.5rem;
   }
   .card h2 { font-size: 1.125rem; margin-bottom: 1rem; color: #e6edf3; }
+
+  /* Upload zone */
   #drop-zone {
     border: 2px dashed #30363d; border-radius: 8px; padding: 3rem 1rem;
     text-align: center; cursor: pointer; transition: border-color .2s, background .2s;
@@ -31,19 +33,20 @@
   #drop-zone:hover, #drop-zone.drag-over {
     border-color: #f778ba; background: rgba(247,120,186,0.05);
   }
-  #drop-zone.has-image { border-color: #3fb950; padding: 1rem; }
+  #drop-zone.has-image { border-color: #3fb950; padding: 1rem 1rem 0.75rem; }
   #drop-zone .icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
   #drop-zone .hint { color: #8b949e; font-size: 0.875rem; }
   #drop-zone .hint label { color: #f778ba; cursor: pointer; text-decoration: underline; }
   #file-input { display: none; }
+
   #img-info {
-    display: none; margin-top: 1rem;
-    background: #0d1117; border-radius: 6px; padding: 0.75rem 1rem;
-    font-size: 0.875rem; color: #8b949e;
-    grid-template-columns: auto 1fr; gap: 0.25rem 1rem;
+    display: none; margin-top: 0.75rem;
+    background: #0d1117; border-radius: 6px; padding: 0.5rem 0.75rem;
+    font-size: 0.8rem; color: #8b949e;
   }
-  #img-info .label { color: #8b949e; }
-  #img-info .value { color: #e6edf3; text-align: right; }
+  #img-info .info-row { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+  #img-info .info-row span { color: #e6edf3; }
+
   .control-group { margin-bottom: 1.25rem; }
   .control-group:last-child { margin-bottom: 0; }
   .control-group label {
@@ -51,6 +54,7 @@
     font-size: 0.875rem; color: #c9d1d9; margin-bottom: 0.375rem;
   }
   .control-group label .val { color: #f778ba; font-variant-numeric: tabular-nums; }
+
   input[type="range"] {
     width: 100%; height: 6px; -webkit-appearance: none; appearance: none;
     background: #30363d; border-radius: 3px; outline: none;
@@ -66,8 +70,9 @@
     font-size: 0.875rem; outline: none;
   }
   select:focus, input[type="number"]:focus { border-color: #f778ba; }
-  .dimension-row { display: flex; gap: 0.75rem; }
-  .dimension-row > * { flex: 1; }
+  .dim-row { display: flex; gap: 0.75rem; }
+  .dim-row > * { flex: 1; }
+
   .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
     padding: 0.625rem 1.25rem; border-radius: 6px; border: none;
@@ -81,14 +86,27 @@
     background: #21262d; color: #c9d1d9; border: 1px solid #30363d;
   }
   .btn-secondary:not(:disabled):hover { background: #30363d; }
-  .preview-area {
-    margin-top: 1rem; min-height: 200px;
+
+  /* Before/after comparison */
+  .compare {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;
+    margin-top: 1rem;
+  }
+  .compare-panel {
     background: #0d1117; border-radius: 6px; overflow: hidden;
-    display: flex; align-items: center; justify-content: center;
   }
-  .preview-area img {
-    max-width: 100%; max-height: 480px; object-fit: contain; display: block;
+  .compare-panel .label {
+    font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;
+    padding: 0.5rem 0.75rem; text-align: center;
   }
+  .compare-panel .label.before { color: #58a6ff; }
+  .compare-panel .label.after { color: #3fb950; }
+  .compare-panel img {
+    width: 100%; height: 240px; object-fit: contain; display: block;
+    background: repeating-conic-gradient(#1c2128 0% 25%, transparent 0% 50%) 50%/16px 16px;
+  }
+
+  /* Stats grid */
   .results-grid {
     display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;
   }
@@ -102,23 +120,24 @@
   .result-stat .stat-value.good { color: #3fb950; }
   .result-stat .stat-value.bad { color: #f85149; }
   .result-stat .stat-value.info { color: #58a6ff; }
+
   .actions { display: flex; gap: 0.75rem; margin-top: 1rem; }
   .actions .btn { flex: 1; }
   .status { font-size: 0.875rem; color: #8b949e; text-align: center; margin-top: 1rem; }
   .status.error { color: #f85149; }
-  .spinner {
-    display: inline-block; width: 16px; height: 16px;
-    border: 2px solid #30363d; border-top-color: #f778ba;
-    border-radius: 50%; animation: spin .6s linear infinite;
-    vertical-align: middle;
-  }
+
   @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #30363d; border-top-color: #f778ba; border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle; }
+
   footer {
     width: 100%; padding: 1.5rem; text-align: center;
     color: #8b949e; font-size: 0.75rem;
     border-top: 1px solid #30363d; margin-top: auto;
   }
+
   @media (max-width: 640px) {
+    .compare { grid-template-columns: 1fr; }
+    .compare-panel img { height: 180px; }
     .results-grid { grid-template-columns: 1fr; }
     .actions { flex-direction: column; }
   }
@@ -131,20 +150,24 @@
 </header>
 
 <main>
+  <!-- Upload -->
   <div class="card">
     <h2>Upload</h2>
     <div id="drop-zone" onclick="document.getElementById('file-input').click()">
-      <div class="icon">🖼️</div>
+      <div class="icon">&#x1F5BC;</div>
       <div class="hint">Drop an image here or <label>click to browse</label></div>
       <input type="file" id="file-input" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp" />
     </div>
     <div id="img-info">
-      <span class="label">File</span><span class="value" id="info-name">-</span>
-      <span class="label">Dimensions</span><span class="value" id="info-dims">-</span>
-      <span class="label">Size</span><span class="value" id="info-size">-</span>
+      <div class="info-row">
+        <span>Name: <strong id="info-name">-</strong></span>
+        <span>Size: <strong id="info-size">-</strong></span>
+        <span>Dimensions: <strong id="info-dims">-</strong></span>
+      </div>
     </div>
   </div>
 
+  <!-- Controls (shown after upload) -->
   <div class="card" id="controls-card" style="display:none">
     <h2>Compression Settings</h2>
 
@@ -164,21 +187,30 @@
 
     <div class="control-group">
       <label>Resize (optional)</label>
-      <div class="dimension-row">
+      <div class="dim-row">
         <input type="number" id="resize-w" placeholder="Width" min="1" />
         <input type="number" id="resize-h" placeholder="Height" min="1" />
         <select id="fit">
-          <option value="inside">Fit inside (shrink to fit)</option>
-          <option value="fill">Fill/stretch (exact size)</option>
+          <option value="inside">Fit inside (shrink)</option>
+          <option value="fill">Fill / stretch</option>
         </select>
       </div>
     </div>
 
     <button class="btn btn-primary" id="compress-btn" onclick="compress()">Compress</button>
 
-    <div id="preview-section" style="display:none">
-      <div class="preview-area">
-        <img id="preview-img" alt="Compressed preview" />
+    <!-- Results (shown after first compression) -->
+    <div id="results-section" style="display:none">
+      <!-- Before / After comparison -->
+      <div class="compare">
+        <div class="compare-panel">
+          <div class="label before">Original</div>
+          <img id="orig-preview" alt="Original" />
+        </div>
+        <div class="compare-panel">
+          <div class="label after">Compressed</div>
+          <img id="comp-preview" alt="Compressed" />
+        </div>
       </div>
 
       <div class="results-grid">
@@ -202,7 +234,7 @@
 
       <div class="actions">
         <button class="btn btn-primary" id="download-btn" onclick="download()">Download</button>
-        <button class="btn btn-secondary" onclick="reset()">Reset</button>
+        <button class="btn btn-secondary" onclick="reset()">New Image</button>
       </div>
     </div>
 
@@ -213,18 +245,17 @@
 <footer>Powered by Bun.Image &mdash; libjpeg-turbo &middot; spng &middot; libwebp &middot; Highway SIMD</footer>
 
 <script>
-// State
-let currentId = null;
-let currentName = "";
-let currentWidth = 0;
-let currentHeight = 0;
-let currentSize = 0;
-let compressedBlob = null;
+var currentId = null;
+var currentName = "";
+var currentWidth = 0;
+var currentHeight = 0;
+var currentSize = 0;
+var compressedBlob = null;
+var origBlobUrl = null;
 
-const dropZone = document.getElementById("drop-zone");
-const fileInput = document.getElementById("file-input");
+var dropZone = document.getElementById("drop-zone");
+var fileInput = document.getElementById("file-input");
 
-// Drag & drop
 dropZone.addEventListener("dragover", function(e) { e.preventDefault(); dropZone.classList.add("drag-over"); });
 dropZone.addEventListener("dragleave", function() { dropZone.classList.remove("drag-over"); });
 dropZone.addEventListener("drop", function(e) {
@@ -233,10 +264,19 @@ dropZone.addEventListener("drop", function(e) {
   var f = e.dataTransfer.files[0];
   if (f) handleFile(f);
 });
-
 fileInput.addEventListener("change", function(e) {
   var f = e.target.files[0];
   if (f) handleFile(f);
+});
+
+// Quality slider display
+document.getElementById("quality").addEventListener("input", function(e) {
+  document.getElementById("quality-label").textContent = e.target.value;
+});
+document.getElementById("format").addEventListener("change", function(e) {
+  var fmt = e.target.value;
+  document.getElementById("format-label").textContent = fmt.toUpperCase();
+  document.getElementById("quality-group").style.display = fmt === "png" ? "none" : "block";
 });
 
 function handleFile(file) {
@@ -260,32 +300,20 @@ function handleFile(file) {
       document.getElementById("info-name").textContent = data.name;
       document.getElementById("info-dims").textContent = data.width + " x " + data.height;
       document.getElementById("info-size").textContent = formatSize(data.size);
-      document.getElementById("img-info").style.display = "grid";
+      document.getElementById("img-info").style.display = "block";
 
       dropZone.classList.add("has-image");
-      dropZone.querySelector(".icon").textContent = "check";
+      dropZone.querySelector(".icon").innerHTML = "&#x2705;";
       dropZone.querySelector(".hint").textContent = "Click to change image";
 
       document.getElementById("controls-card").style.display = "block";
-      document.getElementById("preview-section").style.display = "none";
-      setStatus("Image loaded \u2014 adjust settings and compress", false);
+      document.getElementById("results-section").style.display = "none";
+      setStatus("Image loaded &mdash; adjust settings and compress", false);
     })
     .catch(function(e) {
       setStatus(e.message, true);
     });
 }
-
-// Quality slider
-document.getElementById("quality").addEventListener("input", function(e) {
-  document.getElementById("quality-label").textContent = e.target.value;
-});
-
-document.getElementById("format").addEventListener("change", function(e) {
-  var fmt = e.target.value;
-  document.getElementById("format-label").textContent = fmt.toUpperCase();
-  var qg = document.getElementById("quality-group");
-  qg.style.display = fmt === "png" ? "none" : "block";
-});
 
 function compress() {
   if (!currentId) return;
@@ -319,10 +347,19 @@ function compress() {
     .then(function(result) {
       compressedBlob = result.blob;
 
-      var url = URL.createObjectURL(result.blob);
-      document.getElementById("preview-img").src = url;
-      document.getElementById("preview-section").style.display = "block";
+      // Clean up old blob URLs
+      if (origBlobUrl) URL.revokeObjectURL(origBlobUrl);
 
+      // Show original preview (fetch fresh in case of re-compress)
+      origBlobUrl = "/api/original/" + currentId;
+      document.getElementById("orig-preview").src = origBlobUrl;
+
+      // Show compressed preview
+      var compUrl = URL.createObjectURL(result.blob);
+      document.getElementById("comp-preview").src = compUrl;
+      document.getElementById("results-section").style.display = "block";
+
+      // Stats
       document.getElementById("res-original").textContent = formatSize(result.origSize);
 
       var compEl = document.getElementById("res-compressed");
@@ -351,18 +388,21 @@ function download() {
   var format = document.getElementById("format").value;
   var a = document.createElement("a");
   a.href = URL.createObjectURL(compressedBlob);
-  a.download = "compressed." + format;
+  // Preserve original filename with new extension
+  var base = currentName.replace(/\.[^.]+$/, "");
+  a.download = base + "." + format;
   a.click();
 }
 
 function reset() {
-  currentId = null;
+  if (origBlobUrl) { URL.revokeObjectURL(origBlobUrl); origBlobUrl = null; }
   compressedBlob = null;
-  document.getElementById("preview-section").style.display = "none";
+  currentId = null;
+  document.getElementById("results-section").style.display = "none";
   document.getElementById("controls-card").style.display = "none";
   document.getElementById("img-info").style.display = "none";
   dropZone.classList.remove("has-image");
-  dropZone.querySelector(".icon").textContent = "image";
+  dropZone.querySelector(".icon").innerHTML = "&#x1F5BC;";
   dropZone.querySelector(".hint").innerHTML = 'Drop an image here or <label>click to browse</label>';
   fileInput.value = "";
   setStatus("", false);
@@ -376,7 +416,7 @@ function formatSize(bytes) {
 
 function setStatus(msg, isError) {
   var el = document.getElementById("status");
-  el.textContent = msg;
+  el.innerHTML = msg;
   el.className = "status" + (isError ? " error" : "");
 }
 </script>
