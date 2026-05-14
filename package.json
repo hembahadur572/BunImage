@@ -1,0 +1,13 @@
+{
+  "name": "bun-image",
+  "version": "1.0.0",
+  "description": "Zero-dependency image compression app using Bun's native Image API",
+  "module": "server.ts",
+  "scripts": {
+    "dev": "bun run server.ts",
+    "start": "bun run server.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}

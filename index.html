@@ -687,8 +687,10 @@ function doCompress() {
   var fit = document.getElementById("fit").value;
   var filter = document.getElementById("filter-select").value;
   var noEnlarge = document.getElementById("no-enlarge").checked;
-  var rotate = document.querySelector("#rotate-group .chip.active").getAttribute("data-val");
-  var flipVal = document.querySelector("#flip-group .chip.active").getAttribute("data-val");
+  var rotateEl = document.querySelector("#rotate-group .chip.active");
+  var flipEl = document.querySelector("#flip-group .chip.active");
+  var rotate = rotateEl ? rotateEl.getAttribute("data-val") : "0";
+  var flipVal = flipEl ? flipEl.getAttribute("data-val") : "none";
 
   var p = [];
   p.push("quality=" + encodeURIComponent(quality));
