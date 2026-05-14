@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Bun Image Compress</title>
+<title>Bun Image Tools</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -25,7 +25,24 @@
   }
   .card h2 { font-size: 1.125rem; margin-bottom: 1rem; color: #e6edf3; }
 
-  /* Upload zone */
+  /* ── Mode toggle ── */
+  .mode-tabs {
+    display: flex; gap: 0; margin-bottom: 1.25rem; border-radius: 8px;
+    overflow: hidden; border: 1px solid #30363d;
+  }
+  .mode-tab {
+    flex: 1; padding: 0.75rem 1rem; text-align: center; cursor: pointer;
+    font-size: 0.9rem; font-weight: 500; transition: all .15s; user-select: none;
+    background: #0d1117; color: #8b949e; border: none;
+  }
+  .mode-tab:not(:last-child) { border-right: 1px solid #30363d; }
+  .mode-tab:hover { color: #e6edf3; }
+  .mode-tab.active {
+    background: #f778ba; color: #0d1117; font-weight: 600;
+  }
+  .mode-tab .tab-icon { margin-right: 0.4rem; }
+
+  /* ── Upload zone ── */
   #drop-zone {
     border: 2px dashed #30363d; border-radius: 8px; padding: 3rem 1rem;
     text-align: center; cursor: pointer; transition: border-color .2s, background .2s;
@@ -43,21 +60,6 @@
     display: none; max-height: 180px; width: auto; border-radius: 4px;
     margin-bottom: 0.5rem; box-shadow: 0 0 0 1px rgba(247,120,186,0.2);
   }
-  #paste-toast {
-    display: none; position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%);
-    background: #f778ba; color: #0d1117; padding: 0.5rem 1.25rem; border-radius: 8px;
-    font-size: 0.85rem; font-weight: 500; z-index: 100;
-    animation: fadeInUp .3s ease;
-  }
-  @keyframes fadeInUp { from { opacity:0; transform: translateX(-50%) translateY(10px); } to { opacity:1; transform: translateX(-50%) translateY(0); } }
-  #upload-bar-wrap {
-    display: none; margin-top: 0.5rem; height: 4px; border-radius: 2px;
-    background: #30363d; overflow: hidden;
-  }
-  #upload-bar {
-    height: 100%; width: 0%; background: #f778ba; border-radius: 2px;
-    transition: width .15s ease;
-  }
 
   #img-info {
     display: none; margin-top: 0.75rem;
@@ -67,6 +69,7 @@
   #img-info .info-row { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
   #img-info .info-row span { color: #e6edf3; }
 
+  /* ── Shared controls ── */
   .control-group { margin-bottom: 1.25rem; }
   .control-group:last-child { margin-bottom: 0; }
   .control-group label {
@@ -101,7 +104,6 @@
   .dim-field-wrap .lock-btn.locked { color: #f778ba; }
   .dim-field-wrap input { padding-right: 2rem; }
 
-  /* Checkbox toggle */
   .toggle-row {
     display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem;
   }
@@ -114,27 +116,18 @@
     content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
     border-radius: 50%; background: #8b949e; transition: transform .2s, background .2s;
   }
-  .toggle-row input[type="checkbox"]:checked {
-    background: #f778ba;
-  }
-  .toggle-row input[type="checkbox"]:checked::before {
-    transform: translateX(16px); background: #0d1117;
-  }
+  .toggle-row input[type="checkbox"]:checked { background: #f778ba; }
+  .toggle-row input[type="checkbox"]:checked::before { transform: translateX(16px); background: #0d1117; }
   .toggle-row label { font-size: 0.8rem; color: #8b949e; cursor: pointer; margin: 0; }
 
-  /* Button groups for rotate/flip */
-  .btn-group {
-    display: flex; gap: 0.5rem; flex-wrap: wrap;
-  }
+  .btn-group { display: flex; gap: 0.5rem; flex-wrap: wrap; }
   .btn-group .chip {
     padding: 0.4rem 0.85rem; border-radius: 6px; border: 1px solid #30363d;
     background: #0d1117; color: #c9d1d9; font-size: 0.8rem; cursor: pointer;
     transition: all .15s; user-select: none;
   }
   .btn-group .chip:hover { border-color: #f778ba; }
-  .btn-group .chip.active {
-    background: #f778ba; color: #0d1117; border-color: #f778ba; font-weight: 600;
-  }
+  .btn-group .chip.active { background: #f778ba; color: #0d1117; border-color: #f778ba; font-weight: 600; }
   .btn-group .chip-icon { font-size: 1rem; margin-right: 0.2rem; }
 
   .btn {
@@ -151,7 +144,7 @@
   }
   .btn-secondary:not(:disabled):hover { background: #30363d; }
 
-  /* Live indicator */
+  /* ── Live indicator ── */
   .live-badge {
     display: inline-flex; align-items: center; gap: 0.35rem;
     font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em;
@@ -164,7 +157,6 @@
   .live-badge .dot.busy { background: #f778ba; animation: pulse .8s ease-in-out infinite; }
   @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
 
-  /* Compression progress bar */
   #compress-bar {
     display: none; height: 2px; border-radius: 1px; overflow: hidden;
     background: #21262d; margin: -0.75rem 0 0.75rem 0;
@@ -176,7 +168,11 @@
   }
   @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
-  /* Section headings with separators */
+  /* ── Mode panels ── */
+  .mode-panel { display: none; }
+  .mode-panel.active { display: block; }
+
+  /* ── Section heads ── */
   .section-head {
     font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
     color: #8b949e; margin-bottom: 0.6rem; padding-top: 0.5rem;
@@ -184,7 +180,7 @@
   }
   .section-head:first-of-type { border-top: none; padding-top: 0; }
 
-  /* Comparison slider */
+  /* ── Comparison slider ── */
   .cmp {
     position: relative; margin-top: 1rem; user-select: none;
     background: #0d1117; border-radius: 6px; overflow: hidden;
@@ -194,8 +190,7 @@
     background: repeating-conic-gradient(#1c2128 0% 25%, transparent 0% 50%) 50%/16px 16px;
   }
   .cmp-overlay {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    overflow: hidden;
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden;
   }
   .cmp-overlay img {
     display: block; width: 100%; height: 100%; object-fit: contain;
@@ -207,28 +202,22 @@
   }
   .cmp-handle::before {
     content: ""; position: absolute; top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
-    width: 36px; height: 36px; border-radius: 50%;
+    transform: translate(-50%, -50%); width: 36px; height: 36px; border-radius: 50%;
     background: #f778ba; border: 2px solid #0d1117;
     box-shadow: 0 0 0 2px rgba(247,120,186,0.3);
   }
   .cmp-handle::after {
     content: "\2194"; position: absolute; top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 16px; color: #0d1117; line-height: 1;
-    z-index: 1; pointer-events: none;
+    transform: translate(-50%, -50%); font-size: 16px; color: #0d1117;
+    line-height: 1; z-index: 1; pointer-events: none;
   }
   .cmp-label {
     position: absolute; top: 0.5rem; padding: 0.2rem 0.5rem;
     font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.06em;
     border-radius: 4px; pointer-events: none; z-index: 5;
   }
-  .cmp-label.orig {
-    left: 0.5rem; background: rgba(13,17,23,0.75); color: #58a6ff;
-  }
-  .cmp-label.comp {
-    right: 0.5rem; background: rgba(13,17,23,0.75); color: #3fb950;
-  }
+  .cmp-label.orig { left: 0.5rem; background: rgba(13,17,23,0.75); color: #58a6ff; }
+  .cmp-label.comp { right: 0.5rem; background: rgba(13,17,23,0.75); color: #3fb950; }
 
   .results-grid {
     display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1rem; margin-top: 1rem;
@@ -249,10 +238,39 @@
   .status { font-size: 0.875rem; color: #8b949e; text-align: center; margin-top: 1rem; }
   .status.error { color: #f85149; }
 
+  /* ── Paste toast ── */
+  #paste-toast {
+    display: none; position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%);
+    background: #f778ba; color: #0d1117; padding: 0.5rem 1.25rem; border-radius: 8px;
+    font-size: 0.85rem; font-weight: 500; z-index: 100;
+    animation: fadeInUp .3s ease;
+  }
+  @keyframes fadeInUp { from { opacity:0; transform: translateX(-50%) translateY(10px); } to { opacity:1; transform: translateX(-50%) translateY(0); } }
+  #upload-bar-wrap {
+    display: none; margin-top: 0.5rem; height: 4px; border-radius: 2px;
+    background: #30363d; overflow: hidden;
+  }
+  #upload-bar { height: 100%; width: 0%; background: #f778ba; border-radius: 2px; transition: width .15s ease; }
+
   footer {
     width: 100%; padding: 1.5rem; text-align: center;
     color: #8b949e; font-size: 0.75rem;
     border-top: 1px solid #30363d; margin-top: auto;
+  }
+
+  /* ── Format Changer big convert button ── */
+  .convert-btn {
+    padding: 1rem; border-radius: 8px; border: none; width: 100%;
+    font-size: 1rem; font-weight: 600; cursor: pointer;
+    background: linear-gradient(135deg, #f778ba, #3fb950);
+    color: #0d1117; transition: opacity .2s;
+  }
+  .convert-btn:hover { opacity: 0.9; }
+  .convert-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .format-badge {
+    display: inline-block; padding: 0.15rem 0.4rem; border-radius: 4px;
+    font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
+    background: #21262d; color: #e6edf3;
   }
 
   @media (max-width: 640px) {
@@ -266,8 +284,8 @@
 </head>
 <body>
 <header>
-  <h1><span>Bun</span> Image Compress</h1>
-  <p>Compress images using Bun's native Image API</p>
+  <h1><span>Bun</span> Image Tools</h1>
+  <p>Compress &amp; convert images using Bun's native Image API</p>
 </header>
 
 <main>
@@ -292,97 +310,141 @@
 
   <!-- Controls -->
   <div class="card" id="controls-card" style="display:none">
+    <!-- Mode tabs -->
+    <div class="mode-tabs">
+      <button class="mode-tab active" data-mode="compressor" onclick="switchMode('compressor')">
+        <span class="tab-icon">&#x1F4E6;</span> Compressor
+      </button>
+      <button class="mode-tab" data-mode="format" onclick="switchMode('format')">
+        <span class="tab-icon">&#x1F504;</span> Format Changer
+      </button>
+    </div>
+
     <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem">
-      <h2 style="margin:0">Compression Settings</h2>
-      <span class="live-badge"><span class="dot" id="live-dot"></span> Live Preview</span>
+      <h2 style="margin:0;font-size:1rem" id="mode-title">Compressor</h2>
+      <span class="live-badge"><span class="dot" id="live-dot"></span> <span id="live-label">Live Preview</span></span>
     </div>
     <div id="compress-bar"><div id="compress-bar-inner"></div></div>
 
-    <div class="section-head">Output</div>
+    <!-- ── COMPRESSOR PANEL ── -->
+    <div class="mode-panel active" id="panel-compressor">
 
-    <div class="control-group">
-      <label>Format <span class="val" id="format-label">JPEG</span></label>
-      <select id="format">
-        <option value="jpeg">JPEG</option>
-        <option value="webp">WebP</option>
-        <option value="png">PNG</option>
-      </select>
-    </div>
+      <div class="section-head">Output</div>
 
-    <div class="control-group" id="quality-group">
-      <label>Quality <span class="val" id="quality-label">80</span></label>
-      <input type="range" id="quality" min="1" max="100" value="80" />
-    </div>
-
-    <div class="section-head">Resize</div>
-
-    <div class="control-group">
-      <label>Dimensions <span style="font-weight:400;color:#8b949e;font-size:0.8rem">(leave blank for original)</span></label>
-      <div class="dim-row">
-        <div class="dim-field-wrap">
-          <input type="number" id="resize-w" placeholder="Width" min="1" />
-          <button class="lock-btn locked" id="lock-btn" title="Lock aspect ratio">&#x1F517;</button>
-        </div>
-        <div class="dim-field-wrap">
-          <input type="number" id="resize-h" placeholder="Height" min="1" />
-        </div>
-        <select id="fit">
-          <option value="inside">Fit inside</option>
-          <option value="fill">Fill / stretch</option>
+      <div class="control-group">
+        <label>Format <span class="val" id="c-format-label">JPEG</span></label>
+        <select id="c-format" onchange="onFormatChange()">
+          <option value="jpeg">JPEG</option>
+          <option value="webp">WebP</option>
+          <option value="png">PNG</option>
         </select>
       </div>
-      <div class="toggle-row">
-        <input type="checkbox" id="no-enlarge" />
-        <label for="no-enlarge">Don't upscale smaller images</label>
+
+      <div class="control-group" id="c-quality-group">
+        <label>Quality <span class="val" id="c-quality-label">80</span></label>
+        <input type="range" id="c-quality" min="1" max="100" value="80" />
+      </div>
+
+      <div class="section-head">Resize</div>
+
+      <div class="control-group">
+        <label>Dimensions <span style="font-weight:400;color:#8b949e;font-size:0.8rem">(leave blank for original)</span></label>
+        <div class="dim-row">
+          <div class="dim-field-wrap">
+            <input type="number" id="c-resize-w" placeholder="Width" min="1" />
+            <button class="lock-btn locked" id="c-lock-btn" title="Lock aspect ratio">&#x1F517;</button>
+          </div>
+          <div class="dim-field-wrap">
+            <input type="number" id="c-resize-h" placeholder="Height" min="1" />
+          </div>
+          <select id="c-fit">
+            <option value="inside">Fit inside</option>
+            <option value="fill">Fill / stretch</option>
+          </select>
+        </div>
+        <div class="toggle-row">
+          <input type="checkbox" id="c-no-enlarge" />
+          <label for="c-no-enlarge">Don't upscale smaller images</label>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Resampling Filter <span class="val" id="c-filter-label">lanczos3 (default)</span></label>
+        <select id="c-filter">
+          <option value="">Default (lanczos3)</option>
+          <option value="lanczos3">lanczos3 — sharpest for photos</option>
+          <option value="lanczos2">lanczos2 — softer, fewer ringing</option>
+          <option value="mitchell">mitchell — smooth bicubic</option>
+          <option value="cubic">cubic — Catmull-Rom, sharper</option>
+          <option value="bilinear">bilinear — fast, soft</option>
+          <option value="box">box — area-average</option>
+          <option value="nearest">nearest — pixel art / hard edges</option>
+          <option value="mks2013">mks2013 — Magic Kernel Sharp</option>
+          <option value="mks2021">mks2021 — Magic Kernel Sharp v2</option>
+        </select>
+      </div>
+
+      <div class="section-head">Transforms</div>
+
+      <div class="control-group">
+        <label>Rotate</label>
+        <div class="btn-group" id="c-rotate-group">
+          <span class="chip active" data-val="0">None</span>
+          <span class="chip" data-val="90">90&deg;</span>
+          <span class="chip" data-val="180">180&deg;</span>
+          <span class="chip" data-val="270">270&deg;</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Flip</label>
+        <div class="btn-group" id="c-flip-group">
+          <span class="chip active" data-val="none">None</span>
+          <span class="chip" data-val="flip"><span class="chip-icon">&#x2195;</span>Flip V</span>
+          <span class="chip" data-val="flop"><span class="chip-icon">&#x2194;</span>Flip H</span>
+          <span class="chip" data-val="both"><span class="chip-icon">&#x21C5;</span>Both</span>
+        </div>
       </div>
     </div>
 
-    <div class="control-group">
-      <label>Resampling Filter <span class="val" id="filter-label">lanczos3 (default)</span></label>
-      <select id="filter-select">
-        <option value="">Default (lanczos3)</option>
-        <option value="lanczos3">lanczos3 — sharpest for photos</option>
-        <option value="lanczos2">lanczos2 — softer, fewer ringing</option>
-        <option value="mitchell">mitchell — smooth bicubic</option>
-        <option value="cubic">cubic — Catmull-Rom, sharper</option>
-        <option value="bilinear">bilinear — fast, soft</option>
-        <option value="box">box — area-average</option>
-        <option value="nearest">nearest — pixel art / hard edges</option>
-        <option value="mks2013">mks2013 — Magic Kernel Sharp</option>
-        <option value="mks2021">mks2021 — Magic Kernel Sharp v2</option>
-      </select>
-    </div>
+    <!-- ── FORMAT CHANGER PANEL ── -->
+    <div class="mode-panel" id="panel-format">
 
-    <div class="section-head">Transforms</div>
+      <div class="section-head">Convert To</div>
 
-    <div class="control-group">
-      <label>Rotate</label>
-      <div class="btn-group" id="rotate-group">
-        <span class="chip active" data-val="0">None</span>
-        <span class="chip" data-val="90">90&deg;</span>
-        <span class="chip" data-val="180">180&deg;</span>
-        <span class="chip" data-val="270">270&deg;</span>
+      <div class="control-group">
+        <label>Target Format</label>
+        <div class="btn-group" id="f-format-group" style="display:flex">
+          <span class="chip active" data-val="jpeg">JPEG</span>
+          <span class="chip" data-val="webp">WebP</span>
+          <span class="chip" data-val="png">PNG</span>
+        </div>
       </div>
-    </div>
 
-    <div class="control-group">
-      <label>Flip</label>
-      <div class="btn-group" id="flip-group">
-        <span class="chip" data-val="none">None</span>
-        <span class="chip" data-val="flip"><span class="chip-icon">&#x2195;</span>Flip V</span>
-        <span class="chip" data-val="flop"><span class="chip-icon">&#x2194;</span>Flip H</span>
-        <span class="chip" data-val="both"><span class="chip-icon">&#x21C5;</span>Both</span>
+      <div class="control-group" id="f-quality-group">
+        <label>Quality <span class="val" id="f-quality-label">80</span></label>
+        <input type="range" id="f-quality" min="1" max="100" value="80" />
       </div>
+
+      <div class="control-group">
+        <label>Resize <span style="font-weight:400;color:#8b949e;font-size:0.8rem">(optional)</span></label>
+        <div class="dim-row">
+          <input type="number" id="f-resize-w" placeholder="Width" min="1" />
+          <input type="number" id="f-resize-h" placeholder="Height" min="1" />
+        </div>
+      </div>
+
+      <button class="convert-btn" id="convert-btn" onclick="doConvert()">&#x1F504; Convert &amp; Download</button>
     </div>
 
-    <!-- Results -->
+    <!-- Results (shared) -->
     <div id="results-section" style="display:none">
       <div class="cmp" id="cmp-container">
         <label class="cmp-label orig">Original</label>
-        <label class="cmp-label comp">Compressed</label>
+        <label class="cmp-label comp" id="cmp-comp-label">Compressed</label>
         <img id="cmp-orig" class="cmp-img" alt="Original" />
         <div class="cmp-overlay" id="cmp-overlay">
-          <img id="cmp-comp" alt="Compressed" />
+          <img id="cmp-comp" alt="Processed" />
         </div>
         <div class="cmp-handle" id="cmp-handle"></div>
       </div>
@@ -393,11 +455,11 @@
           <div class="stat-value info" id="res-original">-</div>
         </div>
         <div class="result-stat">
-          <div class="stat-label">Compressed</div>
+          <div class="stat-label">Processed</div>
           <div class="stat-value" id="res-compressed">-</div>
         </div>
         <div class="result-stat">
-          <div class="stat-label">Savings</div>
+          <div class="stat-label">Change</div>
           <div class="stat-value" id="res-savings">-</div>
         </div>
         <div class="result-stat">
@@ -427,11 +489,13 @@ var currentName = "";
 var currentWidth = 0;
 var currentHeight = 0;
 var currentSize = 0;
+var currentType = "";
 var compressedBlob = null;
 var previewTimer = null;
 var aspectLocked = true;
+var activeMode = "compressor";
 
-// DOM refs
+// ── DOM refs ──
 var dropZone = document.getElementById("drop-zone");
 var fileInput = document.getElementById("file-input");
 var localPreview = document.getElementById("local-preview");
@@ -444,6 +508,27 @@ var cmpOrig = document.getElementById("cmp-orig");
 var cmpComp = document.getElementById("cmp-comp");
 var cmpOverlay = document.getElementById("cmp-overlay");
 var cmpHandle = document.getElementById("cmp-handle");
+var cmpCompLabel = document.getElementById("cmp-comp-label");
+var liveLabel = document.getElementById("live-label");
+var modeTitle = document.getElementById("mode-title");
+
+var ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif", "image/bmp"];
+var MAX_FILE_BYTES = 50 * 1024 * 1024;
+
+// ── Mode switching ──
+function switchMode(mode) {
+  activeMode = mode;
+  document.querySelectorAll(".mode-tab").forEach(function(t) {
+    t.classList.toggle("active", t.getAttribute("data-mode") === mode);
+  });
+  document.querySelectorAll(".mode-panel").forEach(function(p) {
+    p.classList.toggle("active", p.id === "panel-" + mode);
+  });
+  modeTitle.textContent = mode === "compressor" ? "Compressor" : "Format Changer";
+  liveLabel.textContent = mode === "compressor" ? "Live Preview" : "";
+  document.getElementById("live-dot").style.display = mode === "compressor" ? "" : "none";
+  if (currentId) schedulePreview();
+}
 
 // ── Upload ──
 dropZone.addEventListener("dragover", function(e) { e.preventDefault(); dropZone.classList.add("drag-over"); });
@@ -459,83 +544,74 @@ fileInput.addEventListener("change", function(e) {
   if (f) handleFile(f);
 });
 
-// ── Paste support ──
+// ── Paste ──
 document.addEventListener("paste", function(e) {
-  // Check for files first, then image data
   var items = e.clipboardData && e.clipboardData.items;
   if (!items) return;
   for (var i = 0; i < items.length; i++) {
-    var item = items[i];
-    if (item.kind === "file" && item.type.startsWith("image/")) {
-      var file = item.getAsFile();
-      if (file) {
-        e.preventDefault();
-        handlePaste(file);
-        return;
-      }
+    if (items[i].kind === "file" && items[i].type.startsWith("image/")) {
+      var file = items[i].getAsFile();
+      if (file) { e.preventDefault(); handlePaste(file); return; }
     }
   }
-  // Check for image data in text/html or plain text (e.g. copied image from web)
   for (var i = 0; i < items.length; i++) {
     if (items[i].type === "image/png" || items[i].type === "image/jpeg" || items[i].type === "image/webp") {
       var blob = items[i].getAsFile ? items[i].getAsFile() : items[i];
       if (blob) {
         e.preventDefault();
         var ext = items[i].type.split("/")[1] || "png";
-        var file = new File([blob], "clipboard." + ext, { type: items[i].type });
-        handlePaste(file);
+        handlePaste(new File([blob], "clipboard." + ext, { type: items[i].type }));
         return;
       }
     }
   }
 });
 
-// ── Keyboard shortcut: Escape to reset ──
 document.addEventListener("keydown", function(e) {
   if (e.key === "Escape" && currentId) reset();
 });
 
-// ── Control bindings ──
-document.getElementById("quality").addEventListener("input", function(e) {
-  document.getElementById("quality-label").textContent = e.target.value;
+// ── Compressor control bindings ──
+document.getElementById("c-quality").addEventListener("input", function(e) {
+  document.getElementById("c-quality-label").textContent = e.target.value;
   schedulePreview();
 });
-document.getElementById("format").addEventListener("change", function(e) {
-  var fmt = e.target.value;
-  document.getElementById("format-label").textContent = fmt.toUpperCase();
-  document.getElementById("quality-group").style.display = fmt === "png" ? "none" : "block";
+document.getElementById("c-format").addEventListener("change", function(e) {
+  onFormatChange();
   schedulePreview();
 });
-document.getElementById("filter-select").addEventListener("change", function(e) {
+document.getElementById("c-filter").addEventListener("change", function(e) {
   var opt = e.target.options[e.target.selectedIndex];
-  document.getElementById("filter-label").textContent = opt.value ? opt.value : "lanczos3 (default)";
+  document.getElementById("c-filter-label").textContent = opt.value ? opt.value : "lanczos3 (default)";
   schedulePreview();
 });
 
-// Resize inputs
-var rw = document.getElementById("resize-w");
-var rh = document.getElementById("resize-h");
-rw.addEventListener("input", function() { if (aspectLocked && currentWidth) autoLockH(); schedulePreview(); });
-rh.addEventListener("input", function() { schedulePreview(); });
-document.getElementById("fit").addEventListener("change", schedulePreview);
-document.getElementById("no-enlarge").addEventListener("change", schedulePreview);
+var crw = document.getElementById("c-resize-w");
+var crh = document.getElementById("c-resize-h");
+crw.addEventListener("input", function() { if (aspectLocked && currentWidth) autoLockH(); schedulePreview(); });
+crh.addEventListener("input", function() { schedulePreview(); });
+document.getElementById("c-fit").addEventListener("change", schedulePreview);
+document.getElementById("c-no-enlarge").addEventListener("change", schedulePreview);
 
-// Aspect ratio lock
-var lockBtn = document.getElementById("lock-btn");
-lockBtn.addEventListener("click", function() {
+document.getElementById("c-lock-btn").addEventListener("click", function() {
   aspectLocked = !aspectLocked;
-  lockBtn.classList.toggle("locked");
-  lockBtn.innerHTML = aspectLocked ? "&#x1F517;" : "&#x1F513;";
+  this.classList.toggle("locked");
+  this.innerHTML = aspectLocked ? "&#x1F517;" : "&#x1F513;";
 });
 
 function autoLockH() {
-  var w = parseInt(rw.value);
+  var w = parseInt(crw.value);
   if (!w || w <= 0) return;
-  var newH = Math.round((currentHeight / currentWidth) * w);
-  rh.value = newH;
+  crh.value = Math.round((currentHeight / currentWidth) * w);
 }
 
-// ── Chip groups (rotate / flip) ──
+function onFormatChange() {
+  var fmt = document.getElementById("c-format").value;
+  document.getElementById("c-format-label").textContent = fmt.toUpperCase();
+  document.getElementById("c-quality-group").style.display = fmt === "png" ? "none" : "block";
+}
+
+// ── Chip groups ──
 function setupChipGroup(groupId, onChange) {
   var chips = document.querySelectorAll("#" + groupId + " .chip");
   chips.forEach(function(c) {
@@ -547,14 +623,22 @@ function setupChipGroup(groupId, onChange) {
   });
 }
 
-setupChipGroup("rotate-group", function() { schedulePreview(); });
-setupChipGroup("flip-group", function() { schedulePreview(); });
+setupChipGroup("c-rotate-group", function() { schedulePreview(); });
+setupChipGroup("c-flip-group", function() { schedulePreview(); });
+setupChipGroup("f-format-group", function() {
+  var val = document.querySelector("#f-format-group .chip.active").getAttribute("data-val");
+  document.getElementById("f-quality-group").style.display = val === "png" ? "none" : "block";
+});
+
+// ── Format Changer controls ──
+document.getElementById("f-quality").addEventListener("input", function(e) {
+  document.getElementById("f-quality-label").textContent = e.target.value;
+});
 
 // ── Comparison slider ──
 var dragging = false;
 cmpHandle.addEventListener("mousedown", function(e) { e.preventDefault(); dragging = true; });
 cmpHandle.addEventListener("touchstart", function(e) { e.preventDefault(); dragging = true; }, { passive: true });
-
 document.addEventListener("mousemove", function(e) { if (dragging) moveSplit(e.clientX); });
 document.addEventListener("touchmove", function(e) { if (dragging) moveSplit(e.touches[0].clientX); }, { passive: true });
 document.addEventListener("mouseup", function() { dragging = false; });
@@ -567,12 +651,8 @@ function moveSplit(x) {
   cmpHandle.style.left = (pct * 100) + "%";
 }
 
-// ── Upload handler with local preview + progress ──
-var ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif", "image/bmp"];
-var MAX_FILE_BYTES = 50 * 1024 * 1024; // 50 MB
-
+// ── Upload handler ──
 function handleFile(file) {
-  // Client-side validation
   if (!ALLOWED_TYPES.includes(file.type) && !file.type.startsWith("image/")) {
     setStatus("Unsupported file type: " + (file.type || "unknown"), true);
     return;
@@ -581,10 +661,7 @@ function handleFile(file) {
     setStatus("File too large — max 50 MB (got " + formatSize(file.size) + ")", true);
     return;
   }
-
-  // Show local preview immediately
   showLocalPreview(file);
-
   setStatus("Uploading...", false);
   uploadBarWrap.style.display = "block";
   uploadBar.style.width = "0%";
@@ -594,38 +671,20 @@ function handleFile(file) {
 
   var xhr = new XMLHttpRequest();
   xhr.open("POST", "/api/upload", true);
-
   xhr.upload.onprogress = function(e) {
-    if (e.lengthComputable) {
-      var pct = Math.round((e.loaded / e.total) * 100);
-      uploadBar.style.width = pct + "%";
-    }
+    if (e.lengthComputable) uploadBar.style.width = Math.round((e.loaded / e.total) * 100) + "%";
   };
-
   xhr.onload = function() {
     uploadBarWrap.style.display = "none";
     if (xhr.status !== 200) {
-      try {
-        var err = JSON.parse(xhr.responseText);
-        setStatus(err.error || "Upload failed", true);
-      } catch (_) {
-        setStatus("Upload failed (" + xhr.status + ")", true);
-      }
+      try { var err = JSON.parse(xhr.responseText); setStatus(err.error || "Upload failed", true); }
+      catch (_) { setStatus("Upload failed (" + xhr.status + ")", true); }
       return;
     }
-    try {
-      var data = JSON.parse(xhr.responseText);
-      afterUpload(data);
-    } catch (_) {
-      setStatus("Invalid server response", true);
-    }
+    try { afterUpload(JSON.parse(xhr.responseText)); }
+    catch (_) { setStatus("Invalid server response", true); }
   };
-
-  xhr.onerror = function() {
-    uploadBarWrap.style.display = "none";
-    setStatus("Network error during upload", true);
-  };
-
+  xhr.onerror = function() { uploadBarWrap.style.display = "none"; setStatus("Network error during upload", true); };
   xhr.send(form);
 }
 
@@ -639,7 +698,6 @@ function showLocalPreview(file) {
   localPreview.src = url;
   localPreview.style.display = "block";
   localPreview.onload = function() { URL.revokeObjectURL(url); };
-  // Remove the icon, keep the preview visible
   dropZone.querySelector(".icon").style.display = "none";
 }
 
@@ -649,6 +707,7 @@ function afterUpload(data) {
   currentWidth = data.width;
   currentHeight = data.height;
   currentSize = data.size;
+  currentType = data.type;
 
   document.getElementById("info-name").textContent = data.name;
   document.getElementById("info-dims").textContent = data.width + " x " + data.height;
@@ -657,18 +716,16 @@ function afterUpload(data) {
 
   dropZone.classList.add("has-image");
   dropZone.querySelector(".hint").textContent = "Click or drop to change";
-
   document.getElementById("controls-card").style.display = "block";
   document.getElementById("results-section").style.display = "none";
   setStatus("", false);
 
-  // Auto-run first compression
-  doCompress();
+  schedulePreview();
 }
 
-// ── Live preview (debounced) ──
+// ── Compression / Convert ──
 function schedulePreview() {
-  if (!currentId) return;
+  if (!currentId || activeMode !== "compressor") return;
   if (previewTimer) clearTimeout(previewTimer);
   document.getElementById("live-dot").className = "dot busy";
   previewTimer = setTimeout(doCompress, 400);
@@ -677,33 +734,30 @@ function schedulePreview() {
 function doCompress() {
   previewTimer = null;
   if (!currentId) return;
-
   compressBar.style.display = "block";
 
-  var quality = document.getElementById("quality").value;
-  var format = document.getElementById("format").value;
-  var w = document.getElementById("resize-w").value;
-  var h = document.getElementById("resize-h").value;
-  var fit = document.getElementById("fit").value;
-  var filter = document.getElementById("filter-select").value;
-  var noEnlarge = document.getElementById("no-enlarge").checked;
-  var rotateEl = document.querySelector("#rotate-group .chip.active");
-  var flipEl = document.querySelector("#flip-group .chip.active");
+  var quality = document.getElementById("c-quality").value;
+  var format = document.getElementById("c-format").value;
+  var w = document.getElementById("c-resize-w").value;
+  var h = document.getElementById("c-resize-h").value;
+  var fit = document.getElementById("c-fit").value;
+  var filter = document.getElementById("c-filter").value;
+  var noEnlarge = document.getElementById("c-no-enlarge").checked;
+  var rotateEl = document.querySelector("#c-rotate-group .chip.active");
+  var flipEl = document.querySelector("#c-flip-group .chip.active");
   var rotate = rotateEl ? rotateEl.getAttribute("data-val") : "0";
   var flipVal = flipEl ? flipEl.getAttribute("data-val") : "none";
 
-  var p = [];
-  p.push("quality=" + encodeURIComponent(quality));
-  p.push("format=" + encodeURIComponent(format));
+  var p = ["quality=" + encodeURIComponent(quality), "format=" + encodeURIComponent(format)];
   if (w) p.push("width=" + encodeURIComponent(w));
   if (h) p.push("height=" + encodeURIComponent(h));
   if (fit) p.push("fit=" + encodeURIComponent(fit));
   if (filter) p.push("filter=" + encodeURIComponent(filter));
   if (noEnlarge) p.push("withoutEnlargement=true");
   if (rotate && rotate !== "0") p.push("rotate=" + rotate);
-  if (flipVal === "flip") { p.push("flip=true"); }
-  else if (flipVal === "flop") { p.push("flop=true"); }
-  else if (flipVal === "both") { p.push("flip=true&flop=true"); }
+  if (flipVal === "flip") p.push("flip=true");
+  else if (flipVal === "flop") p.push("flop=true");
+  else if (flipVal === "both") { p.push("flip=true"); p.push("flop=true"); }
 
   fetch("/api/compress/" + currentId + "?" + p.join("&"))
     .then(function(res) {
@@ -720,14 +774,12 @@ function doCompress() {
     .then(function(result) {
       if (compressedBlob) URL.revokeObjectURL(compressedBlob);
       compressedBlob = null;
-
       var compUrl = URL.createObjectURL(result.blob);
       compressedBlob = result.blob;
 
       cmpOrig.src = "/api/original/" + currentId;
       cmpComp.src = compUrl;
-
-      // Error handling for comparison images
+      cmpCompLabel.textContent = "Compressed";
       cmpOrig.onerror = function() { this.alt = "Original failed to load"; };
       cmpComp.onerror = function() { this.alt = "Compressed failed to load"; };
 
@@ -736,18 +788,14 @@ function doCompress() {
       cmpHandle.style.left = "50%";
 
       document.getElementById("res-original").textContent = formatSize(result.origSize);
-
       var compEl = document.getElementById("res-compressed");
       compEl.textContent = formatSize(result.compSize);
       compEl.className = "stat-value " + (result.compSize < result.origSize ? "good" : "bad");
-
       var svEl = document.getElementById("res-savings");
       var savingsNum = parseFloat(result.ratio);
       svEl.textContent = savingsNum > 0 ? "-" + result.ratio : "+" + Math.abs(savingsNum) + "%";
       svEl.className = "stat-value " + (savingsNum > 0 ? "good" : (savingsNum < 0 ? "bad" : "info"));
-
-      var dimEl = document.getElementById("res-dims");
-      dimEl.textContent = (result.cw && result.ch) ? result.cw + " x " + result.ch : currentWidth + " x " + currentHeight;
+      document.getElementById("res-dims").textContent = (result.cw && result.ch) ? result.cw + " x " + result.ch : currentWidth + " x " + currentHeight;
 
       document.getElementById("live-dot").className = "dot";
       compressBar.style.display = "none";
@@ -760,14 +808,86 @@ function doCompress() {
     });
 }
 
+// ── Format Changer: Convert + Download ──
+function doConvert() {
+  if (!currentId) return;
+  compressBar.style.display = "block";
+  setStatus("Converting...", false);
+
+  var formatEl = document.querySelector("#f-format-group .chip.active");
+  var format = formatEl ? formatEl.getAttribute("data-val") : "jpeg";
+  var quality = document.getElementById("f-quality").value;
+  var w = document.getElementById("f-resize-w").value;
+  var h = document.getElementById("f-resize-h").value;
+
+  var p = ["quality=" + encodeURIComponent(quality), "format=" + encodeURIComponent(format)];
+  if (w) p.push("width=" + encodeURIComponent(w));
+  if (h) p.push("height=" + encodeURIComponent(h));
+
+  fetch("/api/compress/" + currentId + "?" + p.join("&"))
+    .then(function(res) {
+      if (!res.ok) return res.json().then(function(e) { throw new Error(e.error); });
+      var origSize = parseInt(res.headers.get("X-Original-Size"));
+      var compSize = parseInt(res.headers.get("X-Compressed-Size"));
+      var ratio = res.headers.get("X-Compression-Ratio");
+      var cw = res.headers.get("X-Compressed-Width");
+      var ch = res.headers.get("X-Compressed-Height");
+      return res.blob().then(function(blob) {
+        return { blob: blob, origSize: origSize, compSize: compSize, ratio: ratio, cw: cw, ch: ch, format: format };
+      });
+    })
+    .then(function(result) {
+      if (compressedBlob) URL.revokeObjectURL(compressedBlob);
+      compressedBlob = null;
+      var compUrl = URL.createObjectURL(result.blob);
+      compressedBlob = result.blob;
+
+      cmpOrig.src = "/api/original/" + currentId;
+      cmpComp.src = compUrl;
+      cmpCompLabel.textContent = result.format.toUpperCase();
+      cmpOrig.onerror = function() { this.alt = "Original failed to load"; };
+      cmpComp.onerror = function() { this.alt = "Converted failed to load"; };
+
+      document.getElementById("results-section").style.display = "block";
+      cmpOverlay.style.width = "50%";
+      cmpHandle.style.left = "50%";
+
+      document.getElementById("res-original").textContent = formatSize(result.origSize);
+      var compEl = document.getElementById("res-compressed");
+      compEl.textContent = formatSize(result.compSize);
+      compEl.className = "stat-value " + (result.compSize < result.origSize ? "good" : "bad");
+      var svEl = document.getElementById("res-savings");
+      var savingsNum = parseFloat(result.ratio);
+      svEl.textContent = savingsNum > 0 ? "-" + result.ratio : "+" + Math.abs(savingsNum) + "%";
+      svEl.className = "stat-value " + (savingsNum > 0 ? "good" : (savingsNum < 0 ? "bad" : "info"));
+      document.getElementById("res-dims").textContent = (result.cw && result.ch) ? result.cw + " x " + result.ch : currentWidth + " x " + currentHeight;
+
+      compressBar.style.display = "none";
+      setStatus("", false);
+
+      // Auto-download converted file
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(compressedBlob);
+      a.download = currentName.replace(/\.[^.]+$/, "") + "." + result.format;
+      a.click();
+    })
+    .catch(function(e) {
+      compressBar.style.display = "none";
+      setStatus(e.message, true);
+    });
+}
+
 // ── Download ──
 function download() {
   if (!compressedBlob) return;
-  var format = document.getElementById("format").value;
+  var format = document.getElementById("c-format").value;
+  if (activeMode === "format") {
+    var fel = document.querySelector("#f-format-group .chip.active");
+    format = fel ? fel.getAttribute("data-val") : "jpeg";
+  }
   var a = document.createElement("a");
   a.href = URL.createObjectURL(compressedBlob);
-  var base = currentName.replace(/\.[^.]+$/, "");
-  a.download = base + "." + format;
+  a.download = currentName.replace(/\.[^.]+$/, "") + "." + format;
   a.click();
 }
 
@@ -787,23 +907,22 @@ function reset() {
   dropZone.querySelector(".icon").innerHTML = "&#x1F5BC;";
   dropZone.querySelector(".hint").innerHTML = 'Drop an image here or <label>click to browse</label>';
   fileInput.value = "";
-  rw.value = "";
-  rh.value = "";
+  crw.value = "";
+  crh.value = "";
+  document.getElementById("f-resize-w").value = "";
+  document.getElementById("f-resize-h").value = "";
   setStatus("", false);
 }
 
-// ── Paste toast ──
+// ── Helpers ──
 var pasteToastTimer = null;
 function showPasteToast(msg) {
   pasteToast.textContent = msg;
   pasteToast.style.display = "block";
   if (pasteToastTimer) clearTimeout(pasteToastTimer);
-  pasteToastTimer = setTimeout(function() {
-    pasteToast.style.display = "none";
-  }, 2500);
+  pasteToastTimer = setTimeout(function() { pasteToast.style.display = "none"; }, 2500);
 }
 
-// ── Helpers ──
 function formatSize(bytes) {
   if (bytes < 1024) return bytes + " B";
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
