@@ -22,6 +22,17 @@ setInterval(() => {
   }
 }, CLEANUP_INTERVAL).unref();
 
+// ── Constants ───────────────────────────────────────────────────────────────
+
+const MAX_PIXELS = 4096 * 4096; // ~16 MP, prevents memory DoS
+const VALID_FORMATS = new Set(["jpeg", "png", "webp"]);
+const VALID_FITS = new Set(["fill", "inside"]);
+const VALID_FILTERS = new Set([
+  "lanczos3", "lanczos2", "mitchell", "cubic",
+  "mks2013", "mks2021", "bilinear", "linear", "box", "nearest",
+]);
+const VALID_ROTATIONS = new Set([90, 180, 270]);
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function corsHeaders() {
@@ -49,6 +60,20 @@ function stem(name) {
   return dot > 0 ? name.slice(0, dot) : name;
 }
 
+function clamp(val, min, max) {
+  return Math.min(max, Math.max(min, val));
+}
+
+function parseIntSafe(val, fallback) {
+  const n = parseInt(val);
+  return isNaN(n) ? fallback : n;
+}
+
+function parseFloatSafe(val, fallback) {
+  const n = parseFloat(val);
+  return isNaN(n) ? fallback : n;
+}
+
 // ── Route handlers ───────────────────────────────────────────────────────────
 
 async function handleUpload(req) {
@@ -59,7 +84,7 @@ async function handleUpload(req) {
   const buffer = new Uint8Array(await file.arrayBuffer());
   let img;
   try {
-    img = new Bun.Image(buffer);
+    img = new Bun.Image(buffer, { autoOrient: true, maxPixels: MAX_PIXELS });
   } catch (e) {
     return error("Unsupported image format: " + e.message);
   }
@@ -90,31 +115,60 @@ async function handleCompress(id, params) {
   const stored = store.get(id);
   if (!stored) return error("Image not found", 404);
 
-  const quality = Math.min(100, Math.max(1, parseInt(params.get("quality") ?? "80") || 80));
+  // Parse params with defaults
+  const quality = clamp(parseIntSafe(params.get("quality"), 80), 1, 100);
   const format = params.get("format") ?? "jpeg";
-  const w = params.get("width");
-  const h = params.get("height");
+  const outW = parseIntSafe(params.get("width"), 0);
+  const outH = parseIntSafe(params.get("height"), 0);
   const fit = params.get("fit") ?? "inside";
+  const filter = params.get("filter") ?? "";
+  const noEnlarge = params.get("withoutEnlargement") === "true";
+  const rotate = parseIntSafe(params.get("rotate"), 0);
+  const flipV = params.get("flip") === "true";
+  const flipH = params.get("flop") === "true";
+  const brightness = parseFloatSafe(params.get("brightness"), 1);
+  const saturation = parseFloatSafe(params.get("saturation"), 1);
 
-  if (!["jpeg", "png", "webp"].includes(format)) {
-    return error("Unsupported format: " + format);
+  // Validate
+  if (!VALID_FORMATS.has(format)) return error("Unsupported format: " + format);
+  if (!VALID_FITS.has(fit)) return error("fit must be 'fill' or 'inside'");
+  if (filter && !VALID_FILTERS.has(filter)) return error("Invalid filter: " + filter);
+  if (rotate && !VALID_ROTATIONS.has(rotate)) return error("rotate must be 90, 180, or 270");
+
+  // Decode
+  let img;
+  try {
+    img = new Bun.Image(stored.buffer, { autoOrient: true, maxPixels: MAX_PIXELS });
+  } catch (e) {
+    return error("Decode error: " + e.message);
   }
-  if (!["fill", "inside"].includes(fit)) {
-    return error("fit must be 'fill' or 'inside'");
+
+  // ── Transform pipeline ──
+
+  // 1. Rotate (multiples of 90)
+  if (rotate) img = img.rotate(rotate);
+
+  // 2. Flip / flop
+  if (flipV) img = img.flip();
+  if (flipH) img = img.flop();
+
+  // 3. Modulate (brightness / saturation)
+  if (brightness !== 1 || saturation !== 1) {
+    img = img.modulate({ brightness, saturation });
   }
 
-  let img = new Bun.Image(stored.buffer);
-
-  // Resize if requested
-  if (w || h) {
-    const width = w ? parseInt(w) : stored.width;
-    const height = h ? parseInt(h) : stored.height;
-    if (width > 0 && height > 0 && (width !== stored.width || height !== stored.height)) {
-      img = img.resize(width, height, { fit });
-    }
+  // 4. Resize
+  const doResize = (outW > 0 || outH > 0);
+  if (doResize) {
+    const width = outW > 0 ? outW : stored.width;
+    const height = outH > 0 ? outH : stored.height;
+    const resizeOpts = { fit };
+    if (filter) resizeOpts.filter = filter;
+    if (noEnlarge) resizeOpts.withoutEnlargement = true;
+    img = img.resize(width, height, resizeOpts);
   }
 
-  // Encode
+  // 5. Encode
   let out;
   let mime;
   try {
@@ -138,10 +192,10 @@ async function handleCompress(id, params) {
 
   const ratio = ((1 - out.length / stored.size) * 100).toFixed(1);
 
-  // Actual output dimensions
+  // Actual output dimensions (re-read from encoded bytes if resized)
   let compW = stored.width;
   let compH = stored.height;
-  if (w || h) {
+  if (doResize || rotate) {
     try {
       const reMeta = await new Bun.Image(out).metadata();
       compW = reMeta.width;
@@ -225,7 +279,7 @@ Bun.serve({
 
     // Serve static HTML
     if (url.pathname === "/" || url.pathname === "/index.html") {
-      const htmlFile = await Bun.file(dir + "index.html").bytes();
+      const htmlFile = Bun.file(dir + "index.html");
       return new Response(htmlFile, {
         headers: { "Content-Type": "text/html; charset=utf-8" },
       });
@@ -238,5 +292,7 @@ Bun.serve({
 console.log("");
 console.log("  Bun Image Compress running at http://localhost:" + PORT);
 console.log("  Formats: JPEG, PNG, WebP | Fit: fill, inside");
+console.log("  Filters: lanczos3, mitchell, nearest, box, bilinear, cubic, mks2013, mks2021");
+console.log("  Transforms: rotate (90/180/270), flip, flop, modulate (brightness, saturation)");
 console.log("  Stored images expire after 30 min");
 console.log("");

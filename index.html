@@ -81,6 +81,42 @@
   .dim-field-wrap .lock-btn.locked { color: #f778ba; }
   .dim-field-wrap input { padding-right: 2rem; }
 
+  /* Checkbox toggle */
+  .toggle-row {
+    display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem;
+  }
+  .toggle-row input[type="checkbox"] {
+    -webkit-appearance: none; appearance: none; width: 36px; height: 20px;
+    background: #30363d; border-radius: 10px; cursor: pointer; position: relative;
+    flex-shrink: 0; transition: background .2s;
+  }
+  .toggle-row input[type="checkbox"]::before {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+    border-radius: 50%; background: #8b949e; transition: transform .2s, background .2s;
+  }
+  .toggle-row input[type="checkbox"]:checked {
+    background: #f778ba;
+  }
+  .toggle-row input[type="checkbox"]:checked::before {
+    transform: translateX(16px); background: #0d1117;
+  }
+  .toggle-row label { font-size: 0.8rem; color: #8b949e; cursor: pointer; margin: 0; }
+
+  /* Button groups for rotate/flip */
+  .btn-group {
+    display: flex; gap: 0.5rem; flex-wrap: wrap;
+  }
+  .btn-group .chip {
+    padding: 0.4rem 0.85rem; border-radius: 6px; border: 1px solid #30363d;
+    background: #0d1117; color: #c9d1d9; font-size: 0.8rem; cursor: pointer;
+    transition: all .15s; user-select: none;
+  }
+  .btn-group .chip:hover { border-color: #f778ba; }
+  .btn-group .chip.active {
+    background: #f778ba; color: #0d1117; border-color: #f778ba; font-weight: 600;
+  }
+  .btn-group .chip-icon { font-size: 1rem; margin-right: 0.2rem; }
+
   .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
     padding: 0.625rem 1.25rem; border-radius: 6px; border: none;
@@ -107,6 +143,14 @@
   }
   .live-badge .dot.busy { background: #f778ba; animation: pulse .8s ease-in-out infinite; }
   @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+  /* Section headings with separators */
+  .section-head {
+    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
+    color: #8b949e; margin-bottom: 0.6rem; padding-top: 0.5rem;
+    border-top: 1px solid #21262d;
+  }
+  .section-head:first-of-type { border-top: none; padding-top: 0; }
 
   /* Comparison slider */
   .cmp {
@@ -219,6 +263,8 @@
       <span class="live-badge"><span class="dot" id="live-dot"></span> Live Preview</span>
     </div>
 
+    <div class="section-head">Output</div>
+
     <div class="control-group">
       <label>Format <span class="val" id="format-label">JPEG</span></label>
       <select id="format">
@@ -233,12 +279,14 @@
       <input type="range" id="quality" min="1" max="100" value="80" />
     </div>
 
+    <div class="section-head">Resize</div>
+
     <div class="control-group">
-      <label>Resize <span style="font-weight:400;color:#8b949e;font-size:0.8rem">(leave blank for original)</span></label>
+      <label>Dimensions <span style="font-weight:400;color:#8b949e;font-size:0.8rem">(leave blank for original)</span></label>
       <div class="dim-row">
         <div class="dim-field-wrap">
           <input type="number" id="resize-w" placeholder="Width" min="1" />
-          <button class="lock-btn" id="lock-btn" title="Lock aspect ratio">&#x1F517;</button>
+          <button class="lock-btn locked" id="lock-btn" title="Lock aspect ratio">&#x1F517;</button>
         </div>
         <div class="dim-field-wrap">
           <input type="number" id="resize-h" placeholder="Height" min="1" />
@@ -248,9 +296,51 @@
           <option value="fill">Fill / stretch</option>
         </select>
       </div>
+      <div class="toggle-row">
+        <input type="checkbox" id="no-enlarge" />
+        <label for="no-enlarge">Don't upscale smaller images</label>
+      </div>
     </div>
 
-    <!-- Comparison slider & results -->
+    <div class="control-group">
+      <label>Resampling Filter <span class="val" id="filter-label">lanczos3 (default)</span></label>
+      <select id="filter-select">
+        <option value="">Default (lanczos3)</option>
+        <option value="lanczos3">lanczos3 — sharpest for photos</option>
+        <option value="lanczos2">lanczos2 — softer, fewer ringing</option>
+        <option value="mitchell">mitchell — smooth bicubic</option>
+        <option value="cubic">cubic — Catmull-Rom, sharper</option>
+        <option value="bilinear">bilinear — fast, soft</option>
+        <option value="box">box — area-average</option>
+        <option value="nearest">nearest — pixel art / hard edges</option>
+        <option value="mks2013">mks2013 — Magic Kernel Sharp</option>
+        <option value="mks2021">mks2021 — Magic Kernel Sharp v2</option>
+      </select>
+    </div>
+
+    <div class="section-head">Transforms</div>
+
+    <div class="control-group">
+      <label>Rotate</label>
+      <div class="btn-group" id="rotate-group">
+        <span class="chip active" data-val="0">None</span>
+        <span class="chip" data-val="90">90&deg;</span>
+        <span class="chip" data-val="180">180&deg;</span>
+        <span class="chip" data-val="270">270&deg;</span>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <label>Flip</label>
+      <div class="btn-group" id="flip-group">
+        <span class="chip" data-val="none">None</span>
+        <span class="chip" data-val="flip"><span class="chip-icon">&#x2195;</span>Flip V</span>
+        <span class="chip" data-val="flop"><span class="chip-icon">&#x2194;</span>Flip H</span>
+        <span class="chip" data-val="both"><span class="chip-icon">&#x21C5;</span>Both</span>
+      </div>
+    </div>
+
+    <!-- Results -->
     <div id="results-section" style="display:none">
       <div class="cmp" id="cmp-container">
         <label class="cmp-label orig">Original</label>
@@ -338,6 +428,11 @@ document.getElementById("format").addEventListener("change", function(e) {
   document.getElementById("quality-group").style.display = fmt === "png" ? "none" : "block";
   schedulePreview();
 });
+document.getElementById("filter-select").addEventListener("change", function(e) {
+  var opt = e.target.options[e.target.selectedIndex];
+  document.getElementById("filter-label").textContent = opt.value ? opt.value : "lanczos3 (default)";
+  schedulePreview();
+});
 
 // Resize inputs
 var rw = document.getElementById("resize-w");
@@ -345,6 +440,7 @@ var rh = document.getElementById("resize-h");
 rw.addEventListener("input", function() { if (aspectLocked && currentWidth) autoLockH(); schedulePreview(); });
 rh.addEventListener("input", function() { schedulePreview(); });
 document.getElementById("fit").addEventListener("change", schedulePreview);
+document.getElementById("no-enlarge").addEventListener("change", schedulePreview);
 
 // Aspect ratio lock
 var lockBtn = document.getElementById("lock-btn");
@@ -357,10 +453,24 @@ lockBtn.addEventListener("click", function() {
 function autoLockH() {
   var w = parseInt(rw.value);
   if (!w || w <= 0) return;
-  // Calculate proportional height from original dimensions
   var newH = Math.round((currentHeight / currentWidth) * w);
   rh.value = newH;
 }
+
+// ── Chip groups (rotate / flip) ──
+function setupChipGroup(groupId, onChange) {
+  var chips = document.querySelectorAll("#" + groupId + " .chip");
+  chips.forEach(function(c) {
+    c.addEventListener("click", function() {
+      chips.forEach(function(x) { x.classList.remove("active"); });
+      c.classList.add("active");
+      onChange(c.getAttribute("data-val"));
+    });
+  });
+}
+
+setupChipGroup("rotate-group", function() { schedulePreview(); });
+setupChipGroup("flip-group", function() { schedulePreview(); });
 
 // ── Comparison slider ──
 var dragging = false;
@@ -436,6 +546,10 @@ function doCompress() {
   var w = document.getElementById("resize-w").value;
   var h = document.getElementById("resize-h").value;
   var fit = document.getElementById("fit").value;
+  var filter = document.getElementById("filter-select").value;
+  var noEnlarge = document.getElementById("no-enlarge").checked;
+  var rotate = document.querySelector("#rotate-group .chip.active").getAttribute("data-val");
+  var flipVal = document.querySelector("#flip-group .chip.active").getAttribute("data-val");
 
   var p = [];
   p.push("quality=" + encodeURIComponent(quality));
@@ -443,6 +557,12 @@ function doCompress() {
   if (w) p.push("width=" + encodeURIComponent(w));
   if (h) p.push("height=" + encodeURIComponent(h));
   if (fit) p.push("fit=" + encodeURIComponent(fit));
+  if (filter) p.push("filter=" + encodeURIComponent(filter));
+  if (noEnlarge) p.push("withoutEnlargement=true");
+  if (rotate && rotate !== "0") p.push("rotate=" + rotate);
+  if (flipVal === "flip") { p.push("flip=true"); }
+  else if (flipVal === "flop") { p.push("flop=true"); }
+  else if (flipVal === "both") { p.push("flip=true&flop=true"); }
 
   fetch("/api/compress/" + currentId + "?" + p.join("&"))
     .then(function(res) {
@@ -457,23 +577,19 @@ function doCompress() {
       });
     })
     .then(function(result) {
-      // Revoke old blob URL to avoid leaks
       if (compressedBlob) URL.revokeObjectURL(compressedBlob);
       compressedBlob = null;
 
       var compUrl = URL.createObjectURL(result.blob);
       compressedBlob = result.blob;
 
-      // Set comparison slider images
       cmpOrig.src = "/api/original/" + currentId;
       cmpComp.src = compUrl;
 
-      // Show section, reset split to 50%
       document.getElementById("results-section").style.display = "block";
       cmpOverlay.style.width = "50%";
       cmpHandle.style.left = "50%";
 
-      // Stats
       document.getElementById("res-original").textContent = formatSize(result.origSize);
 
       var compEl = document.getElementById("res-compressed");
