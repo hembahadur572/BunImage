@@ -1,26 +1,96 @@
 // Bun Image Compress Server
 // Uses Bun's native Image API for fast image compression
 
+import { unlinkSync, readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { join } from "path";
+
 const store = new Map();
 let nextId = 1;
 
-// ── In-memory store with TTL ────────────────────────────────────────────────
+// ── Persistent disk storage ─────────────────────────────────────────────────
 
+const UPLOADS_DIR = join(import.meta.dir, "uploads");
 const TTL_MS = 30 * 60 * 1000; // 30 minutes
 const CLEANUP_INTERVAL = 5 * 60 * 1000; // check every 5 min
+
+if (!existsSync(UPLOADS_DIR)) mkdirSync(UPLOADS_DIR, { recursive: true });
 
 function storeSet(id, entry) {
   entry._expires = Date.now() + TTL_MS;
   store.set(id, entry);
 }
 
+function saveToDisk(id, entry) {
+  // Save metadata as JSON
+  writeFileSync(join(UPLOADS_DIR, id + ".json"), JSON.stringify({
+    name: entry.name,
+    mime: entry.mime,
+    width: entry.width,
+    height: entry.height,
+    size: entry.size,
+    created: entry._expires - TTL_MS,
+  }));
+  // Save raw image bytes
+  writeFileSync(join(UPLOADS_DIR, id + ".bin"), Buffer.from(entry.buffer));
+}
+
+function deleteFromDisk(id) {
+  try { unlinkSync(join(UPLOADS_DIR, id + ".json")); } catch (_) {}
+  try { unlinkSync(join(UPLOADS_DIR, id + ".bin")); } catch (_) {}
+}
+
+function loadPersistentStore() {
+  let maxId = 0;
+  const now = Date.now();
+  try {
+    for (const file of readdirSync(UPLOADS_DIR)) {
+      if (!file.endsWith(".json")) continue;
+      const id = file.slice(0, -5); // strip ".json"
+      const metaPath = join(UPLOADS_DIR, file);
+      const binPath = join(UPLOADS_DIR, id + ".bin");
+      if (!existsSync(binPath)) continue;
+
+      try {
+        const meta = JSON.parse(readFileSync(metaPath, "utf-8"));
+        const created = meta.created || now;
+        if (now - created > TTL_MS) {
+          deleteFromDisk(id);
+          continue;
+        }
+        const buffer = new Uint8Array(readFileSync(binPath));
+        storeSet(id, {
+          buffer,
+          mime: meta.mime || "image/png",
+          name: meta.name || "image.png",
+          width: meta.width || 0,
+          height: meta.height || 0,
+          size: meta.size || buffer.length,
+        });
+        const numId = parseInt(id.replace("img_", ""));
+        if (numId > maxId) maxId = numId;
+      } catch (_) {
+        // Corrupted entry — clean up
+        deleteFromDisk(id);
+      }
+    }
+  } catch (_) {}
+  nextId = maxId + 1;
+  console.log("  Loaded " + store.size + " images from disk (next ID: img_" + nextId + ")");
+}
+
 // Periodic cleanup so idle images don't leak
 setInterval(() => {
   const now = Date.now();
   for (const [id, entry] of store) {
-    if (entry._expires < now) store.delete(id);
+    if (entry._expires < now) {
+      store.delete(id);
+      deleteFromDisk(id);
+    }
   }
 }, CLEANUP_INTERVAL).unref();
+
+// Load store from disk at startup
+loadPersistentStore();
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -54,7 +124,6 @@ function error(msg, status = 400) {
   return json({ error: msg }, status);
 }
 
-// Strip extension from a filename
 function stem(name) {
   const dot = name.lastIndexOf(".");
   return dot > 0 ? name.slice(0, dot) : name;
@@ -92,14 +161,16 @@ async function handleUpload(req) {
   const meta = await img.metadata();
 
   const id = "img_" + nextId++;
-  storeSet(id, {
+  const entry = {
     buffer,
     mime: file.type || "image/png",
     name: file.name || "image.png",
     width: meta.width,
     height: meta.height,
     size: buffer.length,
-  });
+  };
+  storeSet(id, entry);
+  saveToDisk(id, entry); // persist to disk
 
   return json({
     id,
@@ -129,13 +200,11 @@ async function handleCompress(id, params) {
   const brightness = parseFloatSafe(params.get("brightness"), 1);
   const saturation = parseFloatSafe(params.get("saturation"), 1);
 
-  // Validate
   if (!VALID_FORMATS.has(format)) return error("Unsupported format: " + format);
   if (!VALID_FITS.has(fit)) return error("fit must be 'fill' or 'inside'");
   if (filter && !VALID_FILTERS.has(filter)) return error("Invalid filter: " + filter);
   if (rotate && !VALID_ROTATIONS.has(rotate)) return error("rotate must be 90, 180, or 270");
 
-  // Decode
   let img;
   try {
     img = new Bun.Image(stored.buffer, { autoOrient: true, maxPixels: MAX_PIXELS });
@@ -144,20 +213,13 @@ async function handleCompress(id, params) {
   }
 
   // ── Transform pipeline ──
-
-  // 1. Rotate (multiples of 90)
   if (rotate) img = img.rotate(rotate);
-
-  // 2. Flip / flop
   if (flipV) img = img.flip();
   if (flipH) img = img.flop();
-
-  // 3. Modulate (brightness / saturation)
   if (brightness !== 1 || saturation !== 1) {
     img = img.modulate({ brightness, saturation });
   }
 
-  // 4. Resize
   const doResize = (outW > 0 || outH > 0);
   if (doResize) {
     const width = outW > 0 ? outW : stored.width;
@@ -168,7 +230,6 @@ async function handleCompress(id, params) {
     img = img.resize(width, height, resizeOpts);
   }
 
-  // 5. Encode
   let out;
   let mime;
   try {
@@ -192,7 +253,6 @@ async function handleCompress(id, params) {
 
   const ratio = ((1 - out.length / stored.size) * 100).toFixed(1);
 
-  // Actual output dimensions (re-read from encoded bytes if resized)
   let compW = stored.width;
   let compH = stored.height;
   if (doResize || rotate) {
@@ -203,7 +263,6 @@ async function handleCompress(id, params) {
     } catch (_) {}
   }
 
-  // Preserve original filename with new extension
   const downloadName = stem(stored.name) + "." + format;
 
   return new Response(out, {
@@ -224,9 +283,7 @@ async function handleCompress(id, params) {
 // ── Server ──
 
 const PORT = parseInt(Bun.env.PORT || "3000");
-const scriptURL = import.meta.url;
-const scriptPath = scriptURL.startsWith("file://") ? scriptURL.slice(7) : scriptURL;
-const dir = scriptPath.substring(0, scriptPath.lastIndexOf("/") + 1);
+const dir = import.meta.dir;
 
 Bun.serve({
   port: PORT,
@@ -238,18 +295,15 @@ Bun.serve({
       return new Response(null, { headers: corsHeaders() });
     }
 
-    // POST /api/upload
     if (url.pathname === "/api/upload" && method === "POST") {
       return await handleUpload(req);
     }
 
-    // GET /api/compress/:id
     const compressMatch = url.pathname.match(/^\/api\/compress\/(.+)$/);
     if (compressMatch && method === "GET") {
       return await handleCompress(compressMatch[1], url.searchParams);
     }
 
-    // GET /api/info/:id
     const infoMatch = url.pathname.match(/^\/api\/info\/(.+)$/);
     if (infoMatch && method === "GET") {
       const stored = store.get(infoMatch[1]);
@@ -264,7 +318,6 @@ Bun.serve({
       });
     }
 
-    // GET /api/original/:id — serve the original image (for preview comparison)
     const origMatch = url.pathname.match(/^\/api\/original\/(.+)$/);
     if (origMatch && method === "GET") {
       const stored = store.get(origMatch[1]);
@@ -277,9 +330,8 @@ Bun.serve({
       });
     }
 
-    // Serve static HTML
     if (url.pathname === "/" || url.pathname === "/index.html") {
-      const htmlFile = Bun.file(dir + "index.html");
+      const htmlFile = Bun.file(dir + "/index.html");
       return new Response(htmlFile, {
         headers: { "Content-Type": "text/html; charset=utf-8" },
       });
@@ -294,5 +346,6 @@ console.log("  Bun Image Compress running at http://localhost:" + PORT);
 console.log("  Formats: JPEG, PNG, WebP | Fit: fill, inside");
 console.log("  Filters: lanczos3, mitchell, nearest, box, bilinear, cubic, mks2013, mks2021");
 console.log("  Transforms: rotate (90/180/270), flip, flop, modulate (brightness, saturation)");
-console.log("  Stored images expire after 30 min");
+console.log("  Storage: persistent on disk at " + UPLOADS_DIR);
+console.log("  Images expire after 30 min");
 console.log("");

@@ -6,6 +6,10 @@ out
 dist
 *.tgz
 
+# uploads (persistent image storage)
+uploads/*.bin
+uploads/*.json
+
 # code coverage
 coverage
 *.lcov

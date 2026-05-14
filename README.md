@@ -9,10 +9,19 @@ bun run server.ts
 # → http://localhost:3000
 ```
 
+### Docker
+
+```bash
+docker compose up -d
+# → http://localhost:3000
+```
+
 ## Features
 
-- **Upload** images via drag-and-drop or file picker (PNG, JPEG, WebP, BMP, GIF)
+- **Upload** images via drag-and-drop, file picker, or **paste from clipboard** (PNG, JPEG, WebP, BMP, GIF)
 - **Compress** with adjustable quality (1–100)
+- **Instant local preview** — see the image immediately before it's uploaded
+- **Upload progress bar** — real-time feedback during upload
 - **Convert** between JPEG, WebP, and PNG formats
 - **Resize** with `fill` (exact stretch) or `inside` (shrink to fit) modes
   - **Resampling filters**: lanczos3 (default), lanczos2, mitchell, cubic, bilinear, box, nearest, mks2013, mks2021
@@ -21,6 +30,8 @@ bun run server.ts
 - **Color**: adjust brightness and saturation (greyscale support)
 - **Live preview** with before/after comparison slider (debounced)
 - **View stats** — original vs compressed size, savings %, dimensions
+- **Keyboard shortcut**: Escape to reset
+- **Persistent storage** — images survive server restarts (stored in `uploads/`)
 - **Download** the result with original filename
 
 ## API
@@ -41,3 +52,5 @@ Bun's `Bun.Image` decodes images using:
 - **Highway SIMD** — resize/geometry transforms
 
 All statically linked — no system dependencies beyond what Bun ships.
+
+Images are stored on disk in `uploads/` and expire 30 minutes after upload.
