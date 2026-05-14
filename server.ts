@@ -95,6 +95,7 @@ loadPersistentStore();
 // ── Constants ───────────────────────────────────────────────────────────────
 
 const MAX_PIXELS = 4096 * 4096; // ~16 MP, prevents memory DoS
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024; // 50 MB max upload
 const VALID_FORMATS = new Set(["jpeg", "png", "webp"]);
 const VALID_FITS = new Set(["fill", "inside"]);
 const VALID_FILTERS = new Set([
@@ -149,6 +150,11 @@ async function handleUpload(req) {
   const form = await req.formData();
   const file = form.get("file");
   if (!file) return error("No file uploaded");
+
+  // Enforce max upload size
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return error("File too large — max " + (MAX_UPLOAD_BYTES / 1024 / 1024) + " MB");
+  }
 
   const buffer = new Uint8Array(await file.arrayBuffer());
   let img;

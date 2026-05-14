@@ -22,6 +22,8 @@ docker compose up -d
 - **Compress** with adjustable quality (1–100)
 - **Instant local preview** — see the image immediately before it's uploaded
 - **Upload progress bar** — real-time feedback during upload
+- **Client-side validation** — file type and size checked before upload
+- **Server-side limit** — max 50 MB per upload
 - **Convert** between JPEG, WebP, and PNG formats
 - **Resize** with `fill` (exact stretch) or `inside` (shrink to fit) modes
   - **Resampling filters**: lanczos3 (default), lanczos2, mitchell, cubic, bilinear, box, nearest, mks2013, mks2021

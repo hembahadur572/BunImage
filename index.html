@@ -164,6 +164,18 @@
   .live-badge .dot.busy { background: #f778ba; animation: pulse .8s ease-in-out infinite; }
   @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
 
+  /* Compression progress bar */
+  #compress-bar {
+    display: none; height: 2px; border-radius: 1px; overflow: hidden;
+    background: #21262d; margin: -0.75rem 0 0.75rem 0;
+  }
+  #compress-bar-inner {
+    height: 100%; width: 30%; background: linear-gradient(90deg, #f778ba, #3fb950, #f778ba);
+    background-size: 200% 100%; border-radius: 1px;
+    animation: shimmer 1.2s ease-in-out infinite;
+  }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
   /* Section headings with separators */
   .section-head {
     font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
@@ -284,6 +296,7 @@
       <h2 style="margin:0">Compression Settings</h2>
       <span class="live-badge"><span class="dot" id="live-dot"></span> Live Preview</span>
     </div>
+    <div id="compress-bar"><div id="compress-bar-inner"></div></div>
 
     <div class="section-head">Output</div>
 
@@ -424,6 +437,7 @@ var fileInput = document.getElementById("file-input");
 var localPreview = document.getElementById("local-preview");
 var uploadBarWrap = document.getElementById("upload-bar-wrap");
 var uploadBar = document.getElementById("upload-bar");
+var compressBar = document.getElementById("compress-bar");
 var pasteToast = document.getElementById("paste-toast");
 var cmp = document.getElementById("cmp-container");
 var cmpOrig = document.getElementById("cmp-orig");
@@ -554,7 +568,20 @@ function moveSplit(x) {
 }
 
 // ── Upload handler with local preview + progress ──
+var ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif", "image/bmp"];
+var MAX_FILE_BYTES = 50 * 1024 * 1024; // 50 MB
+
 function handleFile(file) {
+  // Client-side validation
+  if (!ALLOWED_TYPES.includes(file.type) && !file.type.startsWith("image/")) {
+    setStatus("Unsupported file type: " + (file.type || "unknown"), true);
+    return;
+  }
+  if (file.size > MAX_FILE_BYTES) {
+    setStatus("File too large — max 50 MB (got " + formatSize(file.size) + ")", true);
+    return;
+  }
+
   // Show local preview immediately
   showLocalPreview(file);
 
@@ -651,6 +678,8 @@ function doCompress() {
   previewTimer = null;
   if (!currentId) return;
 
+  compressBar.style.display = "block";
+
   var quality = document.getElementById("quality").value;
   var format = document.getElementById("format").value;
   var w = document.getElementById("resize-w").value;
@@ -696,6 +725,10 @@ function doCompress() {
       cmpOrig.src = "/api/original/" + currentId;
       cmpComp.src = compUrl;
 
+      // Error handling for comparison images
+      cmpOrig.onerror = function() { this.alt = "Original failed to load"; };
+      cmpComp.onerror = function() { this.alt = "Compressed failed to load"; };
+
       document.getElementById("results-section").style.display = "block";
       cmpOverlay.style.width = "50%";
       cmpHandle.style.left = "50%";
@@ -715,10 +748,12 @@ function doCompress() {
       dimEl.textContent = (result.cw && result.ch) ? result.cw + " x " + result.ch : currentWidth + " x " + currentHeight;
 
       document.getElementById("live-dot").className = "dot";
+      compressBar.style.display = "none";
       setStatus("", false);
     })
     .catch(function(e) {
       document.getElementById("live-dot").className = "dot";
+      compressBar.style.display = "none";
       setStatus(e.message, true);
     });
 }
@@ -739,6 +774,7 @@ function reset() {
   if (compressedBlob) { URL.revokeObjectURL(compressedBlob); compressedBlob = null; }
   if (previewTimer) { clearTimeout(previewTimer); previewTimer = null; }
   currentId = null;
+  compressBar.style.display = "none";
   document.getElementById("results-section").style.display = "none";
   document.getElementById("controls-card").style.display = "none";
   document.getElementById("img-info").style.display = "none";
