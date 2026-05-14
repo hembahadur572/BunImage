@@ -29,15 +29,35 @@
   #drop-zone {
     border: 2px dashed #30363d; border-radius: 8px; padding: 3rem 1rem;
     text-align: center; cursor: pointer; transition: border-color .2s, background .2s;
+    position: relative; overflow: hidden;
   }
   #drop-zone:hover, #drop-zone.drag-over {
     border-color: #f778ba; background: rgba(247,120,186,0.05);
   }
-  #drop-zone.has-image { border-color: #3fb950; padding: 1rem 1rem 0.75rem; }
+  #drop-zone.has-image { border-color: #3fb950; padding: 1rem; }
   #drop-zone .icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
   #drop-zone .hint { color: #8b949e; font-size: 0.875rem; }
   #drop-zone .hint label { color: #f778ba; cursor: pointer; text-decoration: underline; }
   #file-input { display: none; }
+  #local-preview {
+    display: none; max-height: 180px; width: auto; border-radius: 4px;
+    margin-bottom: 0.5rem; box-shadow: 0 0 0 1px rgba(247,120,186,0.2);
+  }
+  #paste-toast {
+    display: none; position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%);
+    background: #f778ba; color: #0d1117; padding: 0.5rem 1.25rem; border-radius: 8px;
+    font-size: 0.85rem; font-weight: 500; z-index: 100;
+    animation: fadeInUp .3s ease;
+  }
+  @keyframes fadeInUp { from { opacity:0; transform: translateX(-50%) translateY(10px); } to { opacity:1; transform: translateX(-50%) translateY(0); } }
+  #upload-bar-wrap {
+    display: none; margin-top: 0.5rem; height: 4px; border-radius: 2px;
+    background: #30363d; overflow: hidden;
+  }
+  #upload-bar {
+    height: 100%; width: 0%; background: #f778ba; border-radius: 2px;
+    transition: width .15s ease;
+  }
 
   #img-info {
     display: none; margin-top: 0.75rem;
@@ -241,11 +261,13 @@
 <main>
   <!-- Upload -->
   <div class="card">
-    <h2>Upload</h2>
+    <h2>Upload <span style="font-weight:400;color:#8b949e;font-size:0.75rem">— or paste an image</span></h2>
     <div id="drop-zone" onclick="document.getElementById('file-input').click()">
+      <img id="local-preview" alt="" />
       <div class="icon">&#x1F5BC;</div>
       <div class="hint">Drop an image here or <label>click to browse</label></div>
       <input type="file" id="file-input" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp" />
+      <div id="upload-bar-wrap"><div id="upload-bar"></div></div>
     </div>
     <div id="img-info">
       <div class="info-row">
@@ -381,6 +403,8 @@
   </div>
 </main>
 
+<div id="paste-toast"></div>
+
 <footer>Powered by Bun.Image &mdash; libjpeg-turbo &middot; spng &middot; libwebp &middot; Highway SIMD</footer>
 
 <script>
@@ -397,6 +421,10 @@ var aspectLocked = true;
 // DOM refs
 var dropZone = document.getElementById("drop-zone");
 var fileInput = document.getElementById("file-input");
+var localPreview = document.getElementById("local-preview");
+var uploadBarWrap = document.getElementById("upload-bar-wrap");
+var uploadBar = document.getElementById("upload-bar");
+var pasteToast = document.getElementById("paste-toast");
 var cmp = document.getElementById("cmp-container");
 var cmpOrig = document.getElementById("cmp-orig");
 var cmpComp = document.getElementById("cmp-comp");
@@ -415,6 +443,42 @@ dropZone.addEventListener("drop", function(e) {
 fileInput.addEventListener("change", function(e) {
   var f = e.target.files[0];
   if (f) handleFile(f);
+});
+
+// ── Paste support ──
+document.addEventListener("paste", function(e) {
+  // Check for files first, then image data
+  var items = e.clipboardData && e.clipboardData.items;
+  if (!items) return;
+  for (var i = 0; i < items.length; i++) {
+    var item = items[i];
+    if (item.kind === "file" && item.type.startsWith("image/")) {
+      var file = item.getAsFile();
+      if (file) {
+        e.preventDefault();
+        handlePaste(file);
+        return;
+      }
+    }
+  }
+  // Check for image data in text/html or plain text (e.g. copied image from web)
+  for (var i = 0; i < items.length; i++) {
+    if (items[i].type === "image/png" || items[i].type === "image/jpeg" || items[i].type === "image/webp") {
+      var blob = items[i].getAsFile ? items[i].getAsFile() : items[i];
+      if (blob) {
+        e.preventDefault();
+        var ext = items[i].type.split("/")[1] || "png";
+        var file = new File([blob], "clipboard." + ext, { type: items[i].type });
+        handlePaste(file);
+        return;
+      }
+    }
+  }
+});
+
+// ── Keyboard shortcut: Escape to reset ──
+document.addEventListener("keydown", function(e) {
+  if (e.key === "Escape" && currentId) reset();
 });
 
 // ── Control bindings ──
@@ -489,44 +553,90 @@ function moveSplit(x) {
   cmpHandle.style.left = (pct * 100) + "%";
 }
 
-// ── Upload handler ──
+// ── Upload handler with local preview + progress ──
 function handleFile(file) {
+  // Show local preview immediately
+  showLocalPreview(file);
+
   setStatus("Uploading...", false);
+  uploadBarWrap.style.display = "block";
+  uploadBar.style.width = "0%";
 
   var form = new FormData();
   form.append("file", file);
 
-  fetch("/api/upload", { method: "POST", body: form })
-    .then(function(res) {
-      if (!res.ok) return res.json().then(function(e) { throw new Error(e.error); });
-      return res.json();
-    })
-    .then(function(data) {
-      currentId = data.id;
-      currentName = data.name;
-      currentWidth = data.width;
-      currentHeight = data.height;
-      currentSize = data.size;
+  var xhr = new XMLHttpRequest();
+  xhr.open("POST", "/api/upload", true);
 
-      document.getElementById("info-name").textContent = data.name;
-      document.getElementById("info-dims").textContent = data.width + " x " + data.height;
-      document.getElementById("info-size").textContent = formatSize(data.size);
-      document.getElementById("img-info").style.display = "block";
+  xhr.upload.onprogress = function(e) {
+    if (e.lengthComputable) {
+      var pct = Math.round((e.loaded / e.total) * 100);
+      uploadBar.style.width = pct + "%";
+    }
+  };
 
-      dropZone.classList.add("has-image");
-      dropZone.querySelector(".icon").innerHTML = "&#x2705;";
-      dropZone.querySelector(".hint").textContent = "Click to change image";
+  xhr.onload = function() {
+    uploadBarWrap.style.display = "none";
+    if (xhr.status !== 200) {
+      try {
+        var err = JSON.parse(xhr.responseText);
+        setStatus(err.error || "Upload failed", true);
+      } catch (_) {
+        setStatus("Upload failed (" + xhr.status + ")", true);
+      }
+      return;
+    }
+    try {
+      var data = JSON.parse(xhr.responseText);
+      afterUpload(data);
+    } catch (_) {
+      setStatus("Invalid server response", true);
+    }
+  };
 
-      document.getElementById("controls-card").style.display = "block";
-      document.getElementById("results-section").style.display = "none";
-      setStatus("", false);
+  xhr.onerror = function() {
+    uploadBarWrap.style.display = "none";
+    setStatus("Network error during upload", true);
+  };
 
-      // Auto-run first compression
-      doCompress();
-    })
-    .catch(function(e) {
-      setStatus(e.message, true);
-    });
+  xhr.send(form);
+}
+
+function handlePaste(file) {
+  showPasteToast("Image pasted — processing...");
+  handleFile(file);
+}
+
+function showLocalPreview(file) {
+  var url = URL.createObjectURL(file);
+  localPreview.src = url;
+  localPreview.style.display = "block";
+  localPreview.onload = function() { URL.revokeObjectURL(url); };
+  // Remove the icon, keep the preview visible
+  dropZone.querySelector(".icon").style.display = "none";
+}
+
+function afterUpload(data) {
+  currentId = data.id;
+  currentName = data.name;
+  currentWidth = data.width;
+  currentHeight = data.height;
+  currentSize = data.size;
+
+  document.getElementById("info-name").textContent = data.name;
+  document.getElementById("info-dims").textContent = data.width + " x " + data.height;
+  document.getElementById("info-size").textContent = formatSize(data.size);
+  document.getElementById("img-info").style.display = "block";
+
+  dropZone.classList.add("has-image");
+  dropZone.querySelector(".hint").textContent = "Click or drop to change";
+
+  document.getElementById("controls-card").style.display = "block";
+  document.getElementById("results-section").style.display = "none";
+  setStatus("", false);
+
+  // Auto-run first compression
+  doCompress();
 }
 
 // ── Live preview (debounced) ──
@@ -632,13 +742,27 @@ function reset() {
   document.getElementById("results-section").style.display = "none";
   document.getElementById("controls-card").style.display = "none";
   document.getElementById("img-info").style.display = "none";
+  localPreview.style.display = "none";
+  localPreview.src = "";
   dropZone.classList.remove("has-image");
+  dropZone.querySelector(".icon").style.display = "";
   dropZone.querySelector(".icon").innerHTML = "&#x1F5BC;";
   dropZone.querySelector(".hint").innerHTML = 'Drop an image here or <label>click to browse</label>';
   fileInput.value = "";
   rw.value = "";
   rh.value = "";
   setStatus("", false);
+}
+
+// ── Paste toast ──
+var pasteToastTimer = null;
+function showPasteToast(msg) {
+  pasteToast.textContent = msg;
+  pasteToast.style.display = "block";
+  if (pasteToastTimer) clearTimeout(pasteToastTimer);
+  pasteToastTimer = setTimeout(function() {
+    pasteToast.style.display = "none";
+  }, 2500);
 }
 
 // ── Helpers ──

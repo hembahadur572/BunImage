@@ -95,7 +95,7 @@ async function handleUpload(req) {
   storeSet(id, {
     buffer,
     mime: file.type || "image/png",
-    name: file.name,
+    name: file.name || "image.png",
     width: meta.width,
     height: meta.height,
     size: buffer.length,
@@ -103,7 +103,7 @@ async function handleUpload(req) {
 
   return json({
     id,
-    name: file.name,
+    name: file.name || "image.png",
     width: meta.width,
     height: meta.height,
     size: buffer.length,
