@@ -3,284 +3,11 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="description" content="Compress, resize, and convert images using Bun's native Image API — zero dependencies." />
+<meta name="color-scheme" content="dark" />
 <title>Bun Image Tools</title>
-<style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-    background: #0d1117; color: #e6edf3; min-height: 100vh;
-    display: flex; flex-direction: column; align-items: center;
-  }
-  header {
-    width: 100%; padding: 1.5rem 1rem; text-align: center;
-    border-bottom: 1px solid #30363d;
-  }
-  header h1 { font-size: 1.5rem; font-weight: 600; }
-  header h1 span { color: #f778ba; }
-  header p { color: #8b949e; font-size: 0.875rem; margin-top: 0.25rem; }
-  main { width: 100%; max-width: 960px; padding: 2rem 1rem; }
-  .card {
-    background: #161b22; border: 1px solid #30363d; border-radius: 8px;
-    padding: 1.5rem; margin-bottom: 1.5rem;
-  }
-  .card h2 { font-size: 1.125rem; margin-bottom: 1rem; color: #e6edf3; }
-
-  /* ── Mode toggle ── */
-  .mode-tabs {
-    display: flex; gap: 0; margin-bottom: 1.25rem; border-radius: 8px;
-    overflow: hidden; border: 1px solid #30363d;
-  }
-  .mode-tab {
-    flex: 1; padding: 0.75rem 1rem; text-align: center; cursor: pointer;
-    font-size: 0.9rem; font-weight: 500; transition: all .15s; user-select: none;
-    background: #0d1117; color: #8b949e; border: none;
-  }
-  .mode-tab:not(:last-child) { border-right: 1px solid #30363d; }
-  .mode-tab:hover { color: #e6edf3; }
-  .mode-tab.active {
-    background: #f778ba; color: #0d1117; font-weight: 600;
-  }
-  .mode-tab .tab-icon { margin-right: 0.4rem; }
-
-  /* ── Upload zone ── */
-  #drop-zone {
-    border: 2px dashed #30363d; border-radius: 8px; padding: 3rem 1rem;
-    text-align: center; cursor: pointer; transition: border-color .2s, background .2s;
-    position: relative; overflow: hidden;
-  }
-  #drop-zone:hover, #drop-zone.drag-over {
-    border-color: #f778ba; background: rgba(247,120,186,0.05);
-  }
-  #drop-zone.has-image { border-color: #3fb950; padding: 1rem; }
-  #drop-zone .icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
-  #drop-zone .hint { color: #8b949e; font-size: 0.875rem; }
-  #drop-zone .hint label { color: #f778ba; cursor: pointer; text-decoration: underline; }
-  #file-input { display: none; }
-  #local-preview {
-    display: none; max-height: 180px; width: auto; border-radius: 4px;
-    margin-bottom: 0.5rem; box-shadow: 0 0 0 1px rgba(247,120,186,0.2);
-  }
-
-  #img-info {
-    display: none; margin-top: 0.75rem;
-    background: #0d1117; border-radius: 6px; padding: 0.5rem 0.75rem;
-    font-size: 0.8rem; color: #8b949e;
-  }
-  #img-info .info-row { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
-  #img-info .info-row span { color: #e6edf3; }
-
-  /* ── Shared controls ── */
-  .control-group { margin-bottom: 1.25rem; }
-  .control-group:last-child { margin-bottom: 0; }
-  .control-group label {
-    display: flex; justify-content: space-between; align-items: center;
-    font-size: 0.875rem; color: #c9d1d9; margin-bottom: 0.375rem;
-  }
-  .control-group label .val { color: #f778ba; font-variant-numeric: tabular-nums; }
-
-  input[type="range"] {
-    width: 100%; height: 6px; -webkit-appearance: none; appearance: none;
-    background: #30363d; border-radius: 3px; outline: none;
-  }
-  input[type="range"]::-webkit-slider-thumb {
-    -webkit-appearance: none; width: 18px; height: 18px;
-    border-radius: 50%; background: #f778ba; cursor: pointer;
-    border: 2px solid #161b22;
-  }
-  select, input[type="number"] {
-    padding: 0.5rem 0.75rem; border-radius: 6px;
-    border: 1px solid #30363d; background: #0d1117; color: #e6edf3;
-    font-size: 0.875rem; outline: none; width: 100%;
-  }
-  select:focus, input[type="number"]:focus { border-color: #f778ba; }
-  .dim-row { display: flex; gap: 0.75rem; align-items: stretch; }
-  .dim-row > * { flex: 1; min-width: 0; }
-  .dim-field-wrap { position: relative; }
-  .dim-field-wrap .lock-btn {
-    position: absolute; right: 0.35rem; top: 50%; transform: translateY(-50%);
-    background: none; border: none; color: #8b949e; cursor: pointer;
-    font-size: 1rem; line-height: 1; padding: 0.25rem; z-index: 1;
-  }
-  .dim-field-wrap .lock-btn.locked { color: #f778ba; }
-  .dim-field-wrap input { padding-right: 2rem; }
-
-  .toggle-row {
-    display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem;
-  }
-  .toggle-row input[type="checkbox"] {
-    -webkit-appearance: none; appearance: none; width: 36px; height: 20px;
-    background: #30363d; border-radius: 10px; cursor: pointer; position: relative;
-    flex-shrink: 0; transition: background .2s;
-  }
-  .toggle-row input[type="checkbox"]::before {
-    content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
-    border-radius: 50%; background: #8b949e; transition: transform .2s, background .2s;
-  }
-  .toggle-row input[type="checkbox"]:checked { background: #f778ba; }
-  .toggle-row input[type="checkbox"]:checked::before { transform: translateX(16px); background: #0d1117; }
-  .toggle-row label { font-size: 0.8rem; color: #8b949e; cursor: pointer; margin: 0; }
-
-  .btn-group { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-  .btn-group .chip {
-    padding: 0.4rem 0.85rem; border-radius: 6px; border: 1px solid #30363d;
-    background: #0d1117; color: #c9d1d9; font-size: 0.8rem; cursor: pointer;
-    transition: all .15s; user-select: none;
-  }
-  .btn-group .chip:hover { border-color: #f778ba; }
-  .btn-group .chip.active { background: #f778ba; color: #0d1117; border-color: #f778ba; font-weight: 600; }
-  .btn-group .chip-icon { font-size: 1rem; margin-right: 0.2rem; }
-
-  .btn {
-    display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
-    padding: 0.625rem 1.25rem; border-radius: 6px; border: none;
-    font-size: 0.875rem; font-weight: 500; cursor: pointer;
-    transition: opacity .2s; width: 100%;
-  }
-  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  .btn-primary { background: #f778ba; color: #0d1117; }
-  .btn-primary:not(:disabled):hover { opacity: 0.9; }
-  .btn-secondary {
-    background: #21262d; color: #c9d1d9; border: 1px solid #30363d;
-  }
-  .btn-secondary:not(:disabled):hover { background: #30363d; }
-
-  /* ── Live indicator ── */
-  .live-badge {
-    display: inline-flex; align-items: center; gap: 0.35rem;
-    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em;
-    color: #8b949e; margin-left: auto;
-  }
-  .live-badge .dot {
-    width: 6px; height: 6px; border-radius: 50%; background: #3fb950;
-    display: inline-block; transition: background .3s;
-  }
-  .live-badge .dot.busy { background: #f778ba; animation: pulse .8s ease-in-out infinite; }
-  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
-
-  #compress-bar {
-    display: none; height: 2px; border-radius: 1px; overflow: hidden;
-    background: #21262d; margin: -0.75rem 0 0.75rem 0;
-  }
-  #compress-bar-inner {
-    height: 100%; width: 30%; background: linear-gradient(90deg, #f778ba, #3fb950, #f778ba);
-    background-size: 200% 100%; border-radius: 1px;
-    animation: shimmer 1.2s ease-in-out infinite;
-  }
-  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-
-  /* ── Mode panels ── */
-  .mode-panel { display: none; }
-  .mode-panel.active { display: block; }
-
-  /* ── Section heads ── */
-  .section-head {
-    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
-    color: #8b949e; margin-bottom: 0.6rem; padding-top: 0.5rem;
-    border-top: 1px solid #21262d;
-  }
-  .section-head:first-of-type { border-top: none; padding-top: 0; }
-
-  /* ── Comparison slider ── */
-  .cmp {
-    position: relative; margin-top: 1rem; user-select: none;
-    background: #0d1117; border-radius: 6px; overflow: hidden;
-  }
-  .cmp-img {
-    display: block; width: 100%; height: 360px; object-fit: contain;
-    background: repeating-conic-gradient(#1c2128 0% 25%, transparent 0% 50%) 50%/16px 16px;
-  }
-  .cmp-overlay {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden;
-  }
-  .cmp-overlay img {
-    display: block; width: 100%; height: 100%; object-fit: contain;
-    background: repeating-conic-gradient(#1c2128 0% 25%, transparent 0% 50%) 50%/16px 16px;
-  }
-  .cmp-handle {
-    position: absolute; top: 0; bottom: 0; width: 3px;
-    background: #f778ba; cursor: ew-resize; z-index: 10;
-  }
-  .cmp-handle::before {
-    content: ""; position: absolute; top: 50%; left: 50%;
-    transform: translate(-50%, -50%); width: 36px; height: 36px; border-radius: 50%;
-    background: #f778ba; border: 2px solid #0d1117;
-    box-shadow: 0 0 0 2px rgba(247,120,186,0.3);
-  }
-  .cmp-handle::after {
-    content: "\2194"; position: absolute; top: 50%; left: 50%;
-    transform: translate(-50%, -50%); font-size: 16px; color: #0d1117;
-    line-height: 1; z-index: 1; pointer-events: none;
-  }
-  .cmp-label {
-    position: absolute; top: 0.5rem; padding: 0.2rem 0.5rem;
-    font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.06em;
-    border-radius: 4px; pointer-events: none; z-index: 5;
-  }
-  .cmp-label.orig { left: 0.5rem; background: rgba(13,17,23,0.75); color: #58a6ff; }
-  .cmp-label.comp { right: 0.5rem; background: rgba(13,17,23,0.75); color: #3fb950; }
-
-  .results-grid {
-    display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1rem; margin-top: 1rem;
-  }
-  .result-stat {
-    background: #0d1117; border-radius: 6px; padding: 0.75rem 0.5rem; text-align: center;
-  }
-  .result-stat .stat-label {
-    font-size: 0.7rem; color: #8b949e; text-transform: uppercase; letter-spacing: 0.06em;
-  }
-  .result-stat .stat-value { font-size: 1.1rem; font-weight: 600; margin-top: 0.25rem; }
-  .result-stat .stat-value.good { color: #3fb950; }
-  .result-stat .stat-value.bad { color: #f85149; }
-  .result-stat .stat-value.info { color: #58a6ff; }
-
-  .actions { display: flex; gap: 0.75rem; margin-top: 1rem; }
-  .actions .btn { flex: 1; }
-  .status { font-size: 0.875rem; color: #8b949e; text-align: center; margin-top: 1rem; }
-  .status.error { color: #f85149; }
-
-  /* ── Paste toast ── */
-  #paste-toast {
-    display: none; position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%);
-    background: #f778ba; color: #0d1117; padding: 0.5rem 1.25rem; border-radius: 8px;
-    font-size: 0.85rem; font-weight: 500; z-index: 100;
-    animation: fadeInUp .3s ease;
-  }
-  @keyframes fadeInUp { from { opacity:0; transform: translateX(-50%) translateY(10px); } to { opacity:1; transform: translateX(-50%) translateY(0); } }
-  #upload-bar-wrap {
-    display: none; margin-top: 0.5rem; height: 4px; border-radius: 2px;
-    background: #30363d; overflow: hidden;
-  }
-  #upload-bar { height: 100%; width: 0%; background: #f778ba; border-radius: 2px; transition: width .15s ease; }
-
-  footer {
-    width: 100%; padding: 1.5rem; text-align: center;
-    color: #8b949e; font-size: 0.75rem;
-    border-top: 1px solid #30363d; margin-top: auto;
-  }
-
-  /* ── Format Changer big convert button ── */
-  .convert-btn {
-    padding: 1rem; border-radius: 8px; border: none; width: 100%;
-    font-size: 1rem; font-weight: 600; cursor: pointer;
-    background: linear-gradient(135deg, #f778ba, #3fb950);
-    color: #0d1117; transition: opacity .2s;
-  }
-  .convert-btn:hover { opacity: 0.9; }
-  .convert-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-  .format-badge {
-    display: inline-block; padding: 0.15rem 0.4rem; border-radius: 4px;
-    font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
-    background: #21262d; color: #e6edf3;
-  }
-
-  @media (max-width: 640px) {
-    .cmp-img { height: 240px; }
-    .results-grid { grid-template-columns: 1fr 1fr; }
-    .dim-row { flex-wrap: wrap; }
-    .dim-row > * { min-width: 80px; }
-    .actions { flex-direction: column; }
-  }
-</style>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%96%BC%EF%B8%8F%3C/text%3E%3C/svg%3E" />
+<link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
 <header>
@@ -291,17 +18,18 @@
 <main>
   <!-- Upload -->
   <div class="card">
-    <h2>Upload <span style="font-weight:400;color:#8b949e;font-size:0.75rem">— or paste an image</span></h2>
-    <div id="drop-zone" onclick="document.getElementById('file-input').click()">
-      <img id="local-preview" alt="" />
-      <div class="icon">&#x1F5BC;</div>
+    <h2>Upload <span style="font-weight:400;color:var(--muted);font-size:0.75rem">— or paste an image (Ctrl/Cmd+V)</span></h2>
+    <div id="drop-zone" role="button" tabindex="0" aria-label="Upload an image">
+      <img id="local-preview" alt="Local preview" />
+      <div class="icon" aria-hidden="true">&#x1F5BC;</div>
       <div class="hint">Drop an image here or <label>click to browse</label></div>
-      <input type="file" id="file-input" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp" />
+      <input type="file" id="file-input" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp,image/avif,image/heic" />
       <div id="upload-bar-wrap"><div id="upload-bar"></div></div>
     </div>
     <div id="img-info">
       <div class="info-row">
         <span>Name: <strong id="info-name">-</strong></span>
+        <span>Type: <strong id="info-type" class="src-badge">-</strong></span>
         <span>Size: <strong id="info-size">-</strong></span>
         <span>Dimensions: <strong id="info-dims">-</strong></span>
       </div>
@@ -311,12 +39,12 @@
   <!-- Controls -->
   <div class="card" id="controls-card" style="display:none">
     <!-- Mode tabs -->
-    <div class="mode-tabs">
-      <button class="mode-tab active" data-mode="compressor" onclick="switchMode('compressor')">
-        <span class="tab-icon">&#x1F4E6;</span> Compressor
+    <div class="mode-tabs" role="tablist">
+      <button class="mode-tab active" data-mode="compressor" role="tab" aria-selected="true" onclick="switchMode('compressor')">
+        <span class="tab-icon" aria-hidden="true">&#x1F4E6;</span> Compressor
       </button>
-      <button class="mode-tab" data-mode="format" onclick="switchMode('format')">
-        <span class="tab-icon">&#x1F504;</span> Format Changer
+      <button class="mode-tab" data-mode="format" role="tab" aria-selected="false" onclick="switchMode('format')">
+        <span class="tab-icon" aria-hidden="true">&#x1F504;</span> Format Changer
       </button>
     </div>
 
@@ -329,35 +57,45 @@
     <!-- ── COMPRESSOR PANEL ── -->
     <div class="mode-panel active" id="panel-compressor">
 
+      <div class="section-head">Presets</div>
+      <div class="presets" id="presets">
+        <span class="preset" data-preset="web">Web (WebP q75)</span>
+        <span class="preset" data-preset="social">Social (JPEG 1200px)</span>
+        <span class="preset" data-preset="thumb">Thumbnail (400px)</span>
+        <span class="preset" data-preset="lossless">Lossless WebP</span>
+        <span class="preset" data-preset="screenshot">Screenshot (PNG palette)</span>
+      </div>
+
       <div class="section-head">Output</div>
 
       <div class="control-group">
         <label>Format <span class="val" id="c-format-label">JPEG</span></label>
-        <select id="c-format" onchange="onFormatChange()">
-          <option value="jpeg">JPEG</option>
-          <option value="webp">WebP</option>
-          <option value="png">PNG</option>
-        </select>
+        <div class="btn-group" id="c-format-group">
+          <span class="chip active" data-val="jpeg">JPEG</span>
+          <span class="chip" data-val="webp">WebP</span>
+          <span class="chip" data-val="png">PNG</span>
+          <span class="chip" data-val="avif" id="c-avif-chip" title="AVIF (availability depends on platform)">AVIF</span>
+        </div>
       </div>
 
       <div class="control-group" id="c-quality-group">
-        <label>Quality <span class="val" id="c-quality-label">80</span></label>
+        <label for="c-quality">Quality <span class="val" id="c-quality-label">80</span></label>
         <input type="range" id="c-quality" min="1" max="100" value="80" />
       </div>
 
       <div class="section-head">Resize</div>
 
       <div class="control-group">
-        <label>Dimensions <span style="font-weight:400;color:#8b949e;font-size:0.8rem">(leave blank for original)</span></label>
+        <label>Dimensions <span style="font-weight:400;color:var(--muted);font-size:0.8rem">(leave blank for original)</span></label>
         <div class="dim-row">
           <div class="dim-field-wrap">
-            <input type="number" id="c-resize-w" placeholder="Width" min="1" />
-            <button class="lock-btn locked" id="c-lock-btn" title="Lock aspect ratio">&#x1F517;</button>
+            <input type="number" id="c-resize-w" placeholder="Width" min="1" aria-label="Width" />
+            <button class="lock-btn locked" id="c-lock-btn" title="Lock aspect ratio" aria-label="Toggle aspect ratio lock">&#x1F517;</button>
           </div>
           <div class="dim-field-wrap">
-            <input type="number" id="c-resize-h" placeholder="Height" min="1" />
+            <input type="number" id="c-resize-h" placeholder="Height" min="1" aria-label="Height" />
           </div>
-          <select id="c-fit">
+          <select id="c-fit" aria-label="Resize fit mode">
             <option value="inside">Fit inside</option>
             <option value="fill">Fill / stretch</option>
           </select>
@@ -369,7 +107,7 @@
       </div>
 
       <div class="control-group">
-        <label>Resampling Filter <span class="val" id="c-filter-label">lanczos3 (default)</span></label>
+        <label for="c-filter">Resampling Filter <span class="val" id="c-filter-label">lanczos3 (default)</span></label>
         <select id="c-filter">
           <option value="">Default (lanczos3)</option>
           <option value="lanczos3">lanczos3 — sharpest for photos</option>
@@ -400,11 +138,59 @@
         <label>Flip</label>
         <div class="btn-group" id="c-flip-group">
           <span class="chip active" data-val="none">None</span>
-          <span class="chip" data-val="flip"><span class="chip-icon">&#x2195;</span>Flip V</span>
-          <span class="chip" data-val="flop"><span class="chip-icon">&#x2194;</span>Flip H</span>
-          <span class="chip" data-val="both"><span class="chip-icon">&#x21C5;</span>Both</span>
+          <span class="chip" data-val="flip"><span class="chip-icon" aria-hidden="true">&#x2195;</span>Flip V</span>
+          <span class="chip" data-val="flop"><span class="chip-icon" aria-hidden="true">&#x2194;</span>Flip H</span>
+          <span class="chip" data-val="both"><span class="chip-icon" aria-hidden="true">&#x21C5;</span>Both</span>
         </div>
       </div>
+
+      <div class="section-head">Color</div>
+
+      <div class="control-group">
+        <label for="c-brightness">Brightness <span class="val" id="c-brightness-label">1.00</span></label>
+        <input type="range" id="c-brightness" min="0" max="2" step="0.05" value="1" />
+      </div>
+
+      <div class="control-group">
+        <label for="c-saturation">Saturation <span class="val" id="c-saturation-label">1.00</span></label>
+        <input type="range" id="c-saturation" min="0" max="2" step="0.05" value="1" />
+        <div class="toggle-row">
+          <input type="checkbox" id="c-greyscale" />
+          <label for="c-greyscale">Greyscale</label>
+        </div>
+      </div>
+
+      <details class="adv" id="c-adv">
+        <summary>Advanced encode options</summary>
+        <div class="adv-body">
+          <div class="toggle-row" id="c-lossless-row" style="display:none">
+            <input type="checkbox" id="c-lossless" />
+            <label for="c-lossless">Lossless WebP (larger, pixel-perfect)</label>
+          </div>
+          <div class="toggle-row" id="c-progressive-row" style="display:none">
+            <input type="checkbox" id="c-progressive" />
+            <label for="c-progressive">Progressive JPEG</label>
+          </div>
+          <div class="control-group" id="c-compression-group" style="display:none;margin-top:0.75rem">
+            <label for="c-compression">PNG Compression <span class="val" id="c-compression-label">6</span></label>
+            <input type="range" id="c-compression" min="0" max="9" value="6" />
+          </div>
+          <div id="c-palette-wrap" style="display:none">
+            <div class="toggle-row">
+              <input type="checkbox" id="c-palette" />
+              <label for="c-palette">Indexed palette PNG (smaller for UI/screenshots)</label>
+            </div>
+            <div class="control-group" id="c-colors-group" style="display:none;margin-top:0.5rem">
+              <label for="c-colors">Palette Colors <span class="val" id="c-colors-label">256</span></label>
+              <input type="range" id="c-colors" min="2" max="256" value="256" />
+            </div>
+            <div class="toggle-row" id="c-dither-row" style="display:none">
+              <input type="checkbox" id="c-dither" />
+              <label for="c-dither">Dither (Floyd–Steinberg)</label>
+            </div>
+          </div>
+        </div>
+      </details>
     </div>
 
     <!-- ── FORMAT CHANGER PANEL ── -->
@@ -418,19 +204,28 @@
           <span class="chip active" data-val="jpeg">JPEG</span>
           <span class="chip" data-val="webp">WebP</span>
           <span class="chip" data-val="png">PNG</span>
+          <span class="chip" data-val="avif" id="f-avif-chip" title="AVIF (availability depends on platform)">AVIF</span>
         </div>
       </div>
 
       <div class="control-group" id="f-quality-group">
-        <label>Quality <span class="val" id="f-quality-label">80</span></label>
+        <label for="f-quality">Quality <span class="val" id="f-quality-label">80</span></label>
         <input type="range" id="f-quality" min="1" max="100" value="80" />
       </div>
 
       <div class="control-group">
-        <label>Resize <span style="font-weight:400;color:#8b949e;font-size:0.8rem">(optional)</span></label>
+        <label>Resize <span style="font-weight:400;color:var(--muted);font-size:0.8rem">(optional)</span></label>
         <div class="dim-row">
-          <input type="number" id="f-resize-w" placeholder="Width" min="1" />
-          <input type="number" id="f-resize-h" placeholder="Height" min="1" />
+          <input type="number" id="f-resize-w" placeholder="Width" min="1" aria-label="Width" />
+          <input type="number" id="f-resize-h" placeholder="Height" min="1" aria-label="Height" />
+          <select id="f-fit" aria-label="Resize fit mode">
+            <option value="inside">Fit inside</option>
+            <option value="fill">Fill / stretch</option>
+          </select>
+        </div>
+        <div class="toggle-row">
+          <input type="checkbox" id="f-no-enlarge" />
+          <label for="f-no-enlarge">Don't upscale smaller images</label>
         </div>
       </div>
 
@@ -446,7 +241,7 @@
         <div class="cmp-overlay" id="cmp-overlay">
           <img id="cmp-comp" alt="Processed" />
         </div>
-        <div class="cmp-handle" id="cmp-handle"></div>
+        <div class="cmp-handle" id="cmp-handle" role="slider" tabindex="0" aria-label="Before / after comparison" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"></div>
       </div>
 
       <div class="results-grid">
@@ -466,474 +261,30 @@
           <div class="stat-label">Dimensions</div>
           <div class="stat-value" id="res-dims">-</div>
         </div>
+        <div class="result-stat">
+          <div class="stat-label">Format</div>
+          <div class="stat-value" id="res-format">-</div>
+        </div>
+        <div class="result-stat">
+          <div class="stat-label">Ratio</div>
+          <div class="stat-value" id="res-ratio">-</div>
+        </div>
       </div>
 
       <div class="actions">
-        <button class="btn btn-primary" id="download-btn" onclick="download()">Download</button>
+        <button class="btn btn-primary" id="download-btn" onclick="download()">Download <span style="opacity:.7;font-size:.75rem">(Ctrl+S)</span></button>
         <button class="btn btn-secondary" onclick="reset()">New Image</button>
       </div>
     </div>
 
-    <div id="status" class="status"></div>
+    <div id="status" class="status" role="status" aria-live="polite"></div>
   </div>
 </main>
 
-<div id="paste-toast"></div>
+<div id="toasts" aria-live="polite" aria-atomic="true"></div>
 
 <footer>Powered by Bun.Image &mdash; libjpeg-turbo &middot; spng &middot; libwebp &middot; Highway SIMD</footer>
 
-<script>
-// ── State ──
-var currentId = null;
-var currentName = "";
-var currentWidth = 0;
-var currentHeight = 0;
-var currentSize = 0;
-var currentType = "";
-var compressedBlob = null;
-var previewTimer = null;
-var aspectLocked = true;
-var activeMode = "compressor";
-
-// ── DOM refs ──
-var dropZone = document.getElementById("drop-zone");
-var fileInput = document.getElementById("file-input");
-var localPreview = document.getElementById("local-preview");
-var uploadBarWrap = document.getElementById("upload-bar-wrap");
-var uploadBar = document.getElementById("upload-bar");
-var compressBar = document.getElementById("compress-bar");
-var pasteToast = document.getElementById("paste-toast");
-var cmp = document.getElementById("cmp-container");
-var cmpOrig = document.getElementById("cmp-orig");
-var cmpComp = document.getElementById("cmp-comp");
-var cmpOverlay = document.getElementById("cmp-overlay");
-var cmpHandle = document.getElementById("cmp-handle");
-var cmpCompLabel = document.getElementById("cmp-comp-label");
-var liveLabel = document.getElementById("live-label");
-var modeTitle = document.getElementById("mode-title");
-
-var ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif", "image/bmp"];
-var MAX_FILE_BYTES = 50 * 1024 * 1024;
-
-// ── Mode switching ──
-function switchMode(mode) {
-  activeMode = mode;
-  document.querySelectorAll(".mode-tab").forEach(function(t) {
-    t.classList.toggle("active", t.getAttribute("data-mode") === mode);
-  });
-  document.querySelectorAll(".mode-panel").forEach(function(p) {
-    p.classList.toggle("active", p.id === "panel-" + mode);
-  });
-  modeTitle.textContent = mode === "compressor" ? "Compressor" : "Format Changer";
-  liveLabel.textContent = mode === "compressor" ? "Live Preview" : "";
-  document.getElementById("live-dot").style.display = mode === "compressor" ? "" : "none";
-  if (currentId) schedulePreview();
-}
-
-// ── Upload ──
-dropZone.addEventListener("dragover", function(e) { e.preventDefault(); dropZone.classList.add("drag-over"); });
-dropZone.addEventListener("dragleave", function() { dropZone.classList.remove("drag-over"); });
-dropZone.addEventListener("drop", function(e) {
-  e.preventDefault();
-  dropZone.classList.remove("drag-over");
-  var f = e.dataTransfer.files[0];
-  if (f) handleFile(f);
-});
-fileInput.addEventListener("change", function(e) {
-  var f = e.target.files[0];
-  if (f) handleFile(f);
-});
-
-// ── Paste ──
-document.addEventListener("paste", function(e) {
-  var items = e.clipboardData && e.clipboardData.items;
-  if (!items) return;
-  for (var i = 0; i < items.length; i++) {
-    if (items[i].kind === "file" && items[i].type.startsWith("image/")) {
-      var file = items[i].getAsFile();
-      if (file) { e.preventDefault(); handlePaste(file); return; }
-    }
-  }
-  for (var i = 0; i < items.length; i++) {
-    if (items[i].type === "image/png" || items[i].type === "image/jpeg" || items[i].type === "image/webp") {
-      var blob = items[i].getAsFile ? items[i].getAsFile() : items[i];
-      if (blob) {
-        e.preventDefault();
-        var ext = items[i].type.split("/")[1] || "png";
-        handlePaste(new File([blob], "clipboard." + ext, { type: items[i].type }));
-        return;
-      }
-    }
-  }
-});
-
-document.addEventListener("keydown", function(e) {
-  if (e.key === "Escape" && currentId) reset();
-});
-
-// ── Compressor control bindings ──
-document.getElementById("c-quality").addEventListener("input", function(e) {
-  document.getElementById("c-quality-label").textContent = e.target.value;
-  schedulePreview();
-});
-document.getElementById("c-format").addEventListener("change", function(e) {
-  onFormatChange();
-  schedulePreview();
-});
-document.getElementById("c-filter").addEventListener("change", function(e) {
-  var opt = e.target.options[e.target.selectedIndex];
-  document.getElementById("c-filter-label").textContent = opt.value ? opt.value : "lanczos3 (default)";
-  schedulePreview();
-});
-
-var crw = document.getElementById("c-resize-w");
-var crh = document.getElementById("c-resize-h");
-crw.addEventListener("input", function() { if (aspectLocked && currentWidth) autoLockH(); schedulePreview(); });
-crh.addEventListener("input", function() { schedulePreview(); });
-document.getElementById("c-fit").addEventListener("change", schedulePreview);
-document.getElementById("c-no-enlarge").addEventListener("change", schedulePreview);
-
-document.getElementById("c-lock-btn").addEventListener("click", function() {
-  aspectLocked = !aspectLocked;
-  this.classList.toggle("locked");
-  this.innerHTML = aspectLocked ? "&#x1F517;" : "&#x1F513;";
-});
-
-function autoLockH() {
-  var w = parseInt(crw.value);
-  if (!w || w <= 0) return;
-  crh.value = Math.round((currentHeight / currentWidth) * w);
-}
-
-function onFormatChange() {
-  var fmt = document.getElementById("c-format").value;
-  document.getElementById("c-format-label").textContent = fmt.toUpperCase();
-  document.getElementById("c-quality-group").style.display = fmt === "png" ? "none" : "block";
-}
-
-// ── Chip groups ──
-function setupChipGroup(groupId, onChange) {
-  var chips = document.querySelectorAll("#" + groupId + " .chip");
-  chips.forEach(function(c) {
-    c.addEventListener("click", function() {
-      chips.forEach(function(x) { x.classList.remove("active"); });
-      c.classList.add("active");
-      onChange(c.getAttribute("data-val"));
-    });
-  });
-}
-
-setupChipGroup("c-rotate-group", function() { schedulePreview(); });
-setupChipGroup("c-flip-group", function() { schedulePreview(); });
-setupChipGroup("f-format-group", function() {
-  var val = document.querySelector("#f-format-group .chip.active").getAttribute("data-val");
-  document.getElementById("f-quality-group").style.display = val === "png" ? "none" : "block";
-});
-
-// ── Format Changer controls ──
-document.getElementById("f-quality").addEventListener("input", function(e) {
-  document.getElementById("f-quality-label").textContent = e.target.value;
-});
-
-// ── Comparison slider ──
-var dragging = false;
-cmpHandle.addEventListener("mousedown", function(e) { e.preventDefault(); dragging = true; });
-cmpHandle.addEventListener("touchstart", function(e) { e.preventDefault(); dragging = true; }, { passive: true });
-document.addEventListener("mousemove", function(e) { if (dragging) moveSplit(e.clientX); });
-document.addEventListener("touchmove", function(e) { if (dragging) moveSplit(e.touches[0].clientX); }, { passive: true });
-document.addEventListener("mouseup", function() { dragging = false; });
-document.addEventListener("touchend", function() { dragging = false; });
-
-function moveSplit(x) {
-  var rect = cmp.getBoundingClientRect();
-  var pct = Math.max(0, Math.min(1, (x - rect.left) / rect.width));
-  cmpOverlay.style.width = (pct * 100) + "%";
-  cmpHandle.style.left = (pct * 100) + "%";
-}
-
-// ── Upload handler ──
-function handleFile(file) {
-  if (!ALLOWED_TYPES.includes(file.type) && !file.type.startsWith("image/")) {
-    setStatus("Unsupported file type: " + (file.type || "unknown"), true);
-    return;
-  }
-  if (file.size > MAX_FILE_BYTES) {
-    setStatus("File too large — max 50 MB (got " + formatSize(file.size) + ")", true);
-    return;
-  }
-  showLocalPreview(file);
-  setStatus("Uploading...", false);
-  uploadBarWrap.style.display = "block";
-  uploadBar.style.width = "0%";
-
-  var form = new FormData();
-  form.append("file", file);
-
-  var xhr = new XMLHttpRequest();
-  xhr.open("POST", "/api/upload", true);
-  xhr.upload.onprogress = function(e) {
-    if (e.lengthComputable) uploadBar.style.width = Math.round((e.loaded / e.total) * 100) + "%";
-  };
-  xhr.onload = function() {
-    uploadBarWrap.style.display = "none";
-    if (xhr.status !== 200) {
-      try { var err = JSON.parse(xhr.responseText); setStatus(err.error || "Upload failed", true); }
-      catch (_) { setStatus("Upload failed (" + xhr.status + ")", true); }
-      return;
-    }
-    try { afterUpload(JSON.parse(xhr.responseText)); }
-    catch (_) { setStatus("Invalid server response", true); }
-  };
-  xhr.onerror = function() { uploadBarWrap.style.display = "none"; setStatus("Network error during upload", true); };
-  xhr.send(form);
-}
-
-function handlePaste(file) {
-  showPasteToast("Image pasted — processing...");
-  handleFile(file);
-}
-
-function showLocalPreview(file) {
-  var url = URL.createObjectURL(file);
-  localPreview.src = url;
-  localPreview.style.display = "block";
-  localPreview.onload = function() { URL.revokeObjectURL(url); };
-  dropZone.querySelector(".icon").style.display = "none";
-}
-
-function afterUpload(data) {
-  currentId = data.id;
-  currentName = data.name;
-  currentWidth = data.width;
-  currentHeight = data.height;
-  currentSize = data.size;
-  currentType = data.type;
-
-  document.getElementById("info-name").textContent = data.name;
-  document.getElementById("info-dims").textContent = data.width + " x " + data.height;
-  document.getElementById("info-size").textContent = formatSize(data.size);
-  document.getElementById("img-info").style.display = "block";
-
-  dropZone.classList.add("has-image");
-  dropZone.querySelector(".hint").textContent = "Click or drop to change";
-  document.getElementById("controls-card").style.display = "block";
-  document.getElementById("results-section").style.display = "none";
-  setStatus("", false);
-
-  schedulePreview();
-}
-
-// ── Compression / Convert ──
-function schedulePreview() {
-  if (!currentId || activeMode !== "compressor") return;
-  if (previewTimer) clearTimeout(previewTimer);
-  document.getElementById("live-dot").className = "dot busy";
-  previewTimer = setTimeout(doCompress, 400);
-}
-
-function doCompress() {
-  previewTimer = null;
-  if (!currentId) return;
-  compressBar.style.display = "block";
-
-  var quality = document.getElementById("c-quality").value;
-  var format = document.getElementById("c-format").value;
-  var w = document.getElementById("c-resize-w").value;
-  var h = document.getElementById("c-resize-h").value;
-  var fit = document.getElementById("c-fit").value;
-  var filter = document.getElementById("c-filter").value;
-  var noEnlarge = document.getElementById("c-no-enlarge").checked;
-  var rotateEl = document.querySelector("#c-rotate-group .chip.active");
-  var flipEl = document.querySelector("#c-flip-group .chip.active");
-  var rotate = rotateEl ? rotateEl.getAttribute("data-val") : "0";
-  var flipVal = flipEl ? flipEl.getAttribute("data-val") : "none";
-
-  var p = ["quality=" + encodeURIComponent(quality), "format=" + encodeURIComponent(format)];
-  if (w) p.push("width=" + encodeURIComponent(w));
-  if (h) p.push("height=" + encodeURIComponent(h));
-  if (fit) p.push("fit=" + encodeURIComponent(fit));
-  if (filter) p.push("filter=" + encodeURIComponent(filter));
-  if (noEnlarge) p.push("withoutEnlargement=true");
-  if (rotate && rotate !== "0") p.push("rotate=" + rotate);
-  if (flipVal === "flip") p.push("flip=true");
-  else if (flipVal === "flop") p.push("flop=true");
-  else if (flipVal === "both") { p.push("flip=true"); p.push("flop=true"); }
-
-  fetch("/api/compress/" + currentId + "?" + p.join("&"))
-    .then(function(res) {
-      if (!res.ok) return res.json().then(function(e) { throw new Error(e.error); });
-      var origSize = parseInt(res.headers.get("X-Original-Size"));
-      var compSize = parseInt(res.headers.get("X-Compressed-Size"));
-      var ratio = res.headers.get("X-Compression-Ratio");
-      var cw = res.headers.get("X-Compressed-Width");
-      var ch = res.headers.get("X-Compressed-Height");
-      return res.blob().then(function(blob) {
-        return { blob: blob, origSize: origSize, compSize: compSize, ratio: ratio, cw: cw, ch: ch };
-      });
-    })
-    .then(function(result) {
-      if (compressedBlob) URL.revokeObjectURL(compressedBlob);
-      compressedBlob = null;
-      var compUrl = URL.createObjectURL(result.blob);
-      compressedBlob = result.blob;
-
-      cmpOrig.src = "/api/original/" + currentId;
-      cmpComp.src = compUrl;
-      cmpCompLabel.textContent = "Compressed";
-      cmpOrig.onerror = function() { this.alt = "Original failed to load"; };
-      cmpComp.onerror = function() { this.alt = "Compressed failed to load"; };
-
-      document.getElementById("results-section").style.display = "block";
-      cmpOverlay.style.width = "50%";
-      cmpHandle.style.left = "50%";
-
-      document.getElementById("res-original").textContent = formatSize(result.origSize);
-      var compEl = document.getElementById("res-compressed");
-      compEl.textContent = formatSize(result.compSize);
-      compEl.className = "stat-value " + (result.compSize < result.origSize ? "good" : "bad");
-      var svEl = document.getElementById("res-savings");
-      var savingsNum = parseFloat(result.ratio);
-      svEl.textContent = savingsNum > 0 ? "-" + result.ratio : "+" + Math.abs(savingsNum) + "%";
-      svEl.className = "stat-value " + (savingsNum > 0 ? "good" : (savingsNum < 0 ? "bad" : "info"));
-      document.getElementById("res-dims").textContent = (result.cw && result.ch) ? result.cw + " x " + result.ch : currentWidth + " x " + currentHeight;
-
-      document.getElementById("live-dot").className = "dot";
-      compressBar.style.display = "none";
-      setStatus("", false);
-    })
-    .catch(function(e) {
-      document.getElementById("live-dot").className = "dot";
-      compressBar.style.display = "none";
-      setStatus(e.message, true);
-    });
-}
-
-// ── Format Changer: Convert + Download ──
-function doConvert() {
-  if (!currentId) return;
-  compressBar.style.display = "block";
-  setStatus("Converting...", false);
-
-  var formatEl = document.querySelector("#f-format-group .chip.active");
-  var format = formatEl ? formatEl.getAttribute("data-val") : "jpeg";
-  var quality = document.getElementById("f-quality").value;
-  var w = document.getElementById("f-resize-w").value;
-  var h = document.getElementById("f-resize-h").value;
-
-  var p = ["quality=" + encodeURIComponent(quality), "format=" + encodeURIComponent(format)];
-  if (w) p.push("width=" + encodeURIComponent(w));
-  if (h) p.push("height=" + encodeURIComponent(h));
-
-  fetch("/api/compress/" + currentId + "?" + p.join("&"))
-    .then(function(res) {
-      if (!res.ok) return res.json().then(function(e) { throw new Error(e.error); });
-      var origSize = parseInt(res.headers.get("X-Original-Size"));
-      var compSize = parseInt(res.headers.get("X-Compressed-Size"));
-      var ratio = res.headers.get("X-Compression-Ratio");
-      var cw = res.headers.get("X-Compressed-Width");
-      var ch = res.headers.get("X-Compressed-Height");
-      return res.blob().then(function(blob) {
-        return { blob: blob, origSize: origSize, compSize: compSize, ratio: ratio, cw: cw, ch: ch, format: format };
-      });
-    })
-    .then(function(result) {
-      if (compressedBlob) URL.revokeObjectURL(compressedBlob);
-      compressedBlob = null;
-      var compUrl = URL.createObjectURL(result.blob);
-      compressedBlob = result.blob;
-
-      cmpOrig.src = "/api/original/" + currentId;
-      cmpComp.src = compUrl;
-      cmpCompLabel.textContent = result.format.toUpperCase();
-      cmpOrig.onerror = function() { this.alt = "Original failed to load"; };
-      cmpComp.onerror = function() { this.alt = "Converted failed to load"; };
-
-      document.getElementById("results-section").style.display = "block";
-      cmpOverlay.style.width = "50%";
-      cmpHandle.style.left = "50%";
-
-      document.getElementById("res-original").textContent = formatSize(result.origSize);
-      var compEl = document.getElementById("res-compressed");
-      compEl.textContent = formatSize(result.compSize);
-      compEl.className = "stat-value " + (result.compSize < result.origSize ? "good" : "bad");
-      var svEl = document.getElementById("res-savings");
-      var savingsNum = parseFloat(result.ratio);
-      svEl.textContent = savingsNum > 0 ? "-" + result.ratio : "+" + Math.abs(savingsNum) + "%";
-      svEl.className = "stat-value " + (savingsNum > 0 ? "good" : (savingsNum < 0 ? "bad" : "info"));
-      document.getElementById("res-dims").textContent = (result.cw && result.ch) ? result.cw + " x " + result.ch : currentWidth + " x " + currentHeight;
-
-      compressBar.style.display = "none";
-      setStatus("", false);
-
-      // Auto-download converted file
-      var a = document.createElement("a");
-      a.href = URL.createObjectURL(compressedBlob);
-      a.download = currentName.replace(/\.[^.]+$/, "") + "." + result.format;
-      a.click();
-    })
-    .catch(function(e) {
-      compressBar.style.display = "none";
-      setStatus(e.message, true);
-    });
-}
-
-// ── Download ──
-function download() {
-  if (!compressedBlob) return;
-  var format = document.getElementById("c-format").value;
-  if (activeMode === "format") {
-    var fel = document.querySelector("#f-format-group .chip.active");
-    format = fel ? fel.getAttribute("data-val") : "jpeg";
-  }
-  var a = document.createElement("a");
-  a.href = URL.createObjectURL(compressedBlob);
-  a.download = currentName.replace(/\.[^.]+$/, "") + "." + format;
-  a.click();
-}
-
-// ── Reset ──
-function reset() {
-  if (compressedBlob) { URL.revokeObjectURL(compressedBlob); compressedBlob = null; }
-  if (previewTimer) { clearTimeout(previewTimer); previewTimer = null; }
-  currentId = null;
-  compressBar.style.display = "none";
-  document.getElementById("results-section").style.display = "none";
-  document.getElementById("controls-card").style.display = "none";
-  document.getElementById("img-info").style.display = "none";
-  localPreview.style.display = "none";
-  localPreview.src = "";
-  dropZone.classList.remove("has-image");
-  dropZone.querySelector(".icon").style.display = "";
-  dropZone.querySelector(".icon").innerHTML = "&#x1F5BC;";
-  dropZone.querySelector(".hint").innerHTML = 'Drop an image here or <label>click to browse</label>';
-  fileInput.value = "";
-  crw.value = "";
-  crh.value = "";
-  document.getElementById("f-resize-w").value = "";
-  document.getElementById("f-resize-h").value = "";
-  setStatus("", false);
-}
-
-// ── Helpers ──
-var pasteToastTimer = null;
-function showPasteToast(msg) {
-  pasteToast.textContent = msg;
-  pasteToast.style.display = "block";
-  if (pasteToastTimer) clearTimeout(pasteToastTimer);
-  pasteToastTimer = setTimeout(function() { pasteToast.style.display = "none"; }, 2500);
-}
-
-function formatSize(bytes) {
-  if (bytes < 1024) return bytes + " B";
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
-  return (bytes / (1024 * 1024)).toFixed(2) + " MB";
-}
-
-function setStatus(msg, isError) {
-  var el = document.getElementById("status");
-  el.innerHTML = msg;
-  el.className = "status" + (isError ? " error" : "");
-}
-</script>
+<script type="module" src="./app.js"></script>
 </body>
 </html>

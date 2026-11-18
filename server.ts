@@ -1,17 +1,19 @@
-// Bun Image Compress Server
-// Uses Bun's native Image API for fast image compression
+// Bun Image Tools Server
+// Zero-dependency image compression/conversion using Bun's native Image API
+// and Bun.serve() declarative routes with an HTML entry (bundled + HMR in dev).
 
 import { unlinkSync, readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
+import index from "./index.html";
+
+// ── Persistent store ─────────────────────────────────────────────────────────
 
 const store = new Map();
 let nextId = 1;
 
-// ── Persistent disk storage ─────────────────────────────────────────────────
-
 const UPLOADS_DIR = join(import.meta.dir, "uploads");
 const TTL_MS = 30 * 60 * 1000; // 30 minutes
-const CLEANUP_INTERVAL = 5 * 60 * 1000; // check every 5 min
+const CLEANUP_INTERVAL = 5 * 60 * 1000; // fallback check every 5 min
 
 if (!existsSync(UPLOADS_DIR)) mkdirSync(UPLOADS_DIR, { recursive: true });
 
@@ -21,16 +23,16 @@ function storeSet(id, entry) {
 }
 
 function saveToDisk(id, entry) {
-  // Save metadata as JSON
   writeFileSync(join(UPLOADS_DIR, id + ".json"), JSON.stringify({
     name: entry.name,
     mime: entry.mime,
+    format: entry.format || "",
     width: entry.width,
     height: entry.height,
     size: entry.size,
+    placeholder: entry.placeholder || "",
     created: entry._expires - TTL_MS,
   }));
-  // Save raw image bytes
   writeFileSync(join(UPLOADS_DIR, id + ".bin"), Buffer.from(entry.buffer));
 }
 
@@ -62,9 +64,11 @@ function loadPersistentStore() {
           buffer,
           mime: meta.mime || "image/png",
           name: meta.name || "image.png",
+          format: meta.format || "",
           width: meta.width || 0,
           height: meta.height || 0,
           size: meta.size || buffer.length,
+          placeholder: meta.placeholder || "",
         });
         const numId = parseInt(id.replace("img_", ""));
         if (numId > maxId) maxId = numId;
@@ -78,8 +82,9 @@ function loadPersistentStore() {
   console.log("  Loaded " + store.size + " images from disk (next ID: img_" + nextId + ")");
 }
 
-// Periodic cleanup so idle images don't leak
-setInterval(() => {
+// ── Expiry cleanup ───────────────────────────────────────────────────────────
+
+function cleanupExpired() {
   const now = Date.now();
   for (const [id, entry] of store) {
     if (entry._expires < now) {
@@ -87,22 +92,75 @@ setInterval(() => {
       deleteFromDisk(id);
     }
   }
-}, CLEANUP_INTERVAL).unref();
+}
 
-// Load store from disk at startup
+// Prefer Bun.cron() (native scheduler) when available, fall back to setInterval.
+try {
+  if (typeof Bun.cron === "function") {
+    const job = Bun.cron("*/5 * * * *", cleanupExpired);
+    if (job && typeof job.unref === "function") job.unref();
+  } else {
+    throw new Error("no cron");
+  }
+} catch (_) {
+  const timer = setInterval(cleanupExpired, CLEANUP_INTERVAL);
+  if (typeof timer.unref === "function") timer.unref();
+}
+
 loadPersistentStore();
 
-// ── Constants ───────────────────────────────────────────────────────────────
+// ── Constants ────────────────────────────────────────────────────────────────
 
 const MAX_PIXELS = 4096 * 4096; // ~16 MP, prevents memory DoS
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024; // 50 MB max upload
-const VALID_FORMATS = new Set(["jpeg", "png", "webp"]);
+const VALID_FORMATS = new Set(["jpeg", "png", "webp", "avif", "heic"]);
 const VALID_FITS = new Set(["fill", "inside"]);
 const VALID_FILTERS = new Set([
   "lanczos3", "lanczos2", "mitchell", "cubic",
   "mks2013", "mks2021", "bilinear", "linear", "box", "nearest",
 ]);
 const VALID_ROTATIONS = new Set([90, 180, 270]);
+const FORMAT_MIME = {
+  jpeg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+  avif: "image/avif",
+  heic: "image/heic",
+};
+
+// 1×1 transparent PNG used to probe encoder availability at startup.
+const PROBE_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNgAAIAAAUAAen63NgAAAAASUVORK5CYII=",
+  "base64"
+);
+
+// ── Capabilities ─────────────────────────────────────────────────────────────
+
+// HEIC/AVIF need OS codecs and are unavailable on Linux, so probe once at boot
+// and let the UI disable unsupported output formats.
+let CAPABILITIES = { jpeg: true, png: true, webp: true, avif: false, heic: false };
+
+async function probeCapabilities() {
+  const attempts = {
+    jpeg: (img) => img.jpeg({ quality: 80 }),
+    png: (img) => img.png(),
+    webp: (img) => img.webp({ quality: 80 }),
+    avif: (img) => img.avif({ quality: 60 }),
+    heic: (img) => img.heic({ quality: 80 }),
+  };
+  const caps = {};
+  for (const [name, fn] of Object.entries(attempts)) {
+    try {
+      await fn(new Bun.Image(PROBE_PNG)).bytes();
+      caps[name] = true;
+    } catch (_) {
+      caps[name] = false;
+    }
+  }
+  CAPABILITIES = caps;
+  const on = Object.keys(caps).filter((k) => caps[k]);
+  console.log("  Encoders available: " + on.join(", "));
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -147,9 +205,14 @@ function parseFloatSafe(val, fallback) {
 // ── Route handlers ───────────────────────────────────────────────────────────
 
 async function handleUpload(req) {
-  const form = await req.formData();
+  let form;
+  try {
+    form = await req.formData();
+  } catch (_) {
+    return error("Invalid upload payload");
+  }
   const file = form.get("file");
-  if (!file) return error("No file uploaded");
+  if (!file || typeof file === "string") return error("No file uploaded");
 
   // Enforce max upload size
   if (file.size > MAX_UPLOAD_BYTES) {
@@ -164,27 +227,42 @@ async function handleUpload(req) {
     return error("Unsupported image format: " + e.message);
   }
 
-  const meta = await img.metadata();
+  let meta;
+  try {
+    meta = await img.metadata();
+  } catch (e) {
+    return error("Could not read image: " + e.message);
+  }
+
+  // Low-quality placeholder (ThumbHash data URL) for progressive preview.
+  let placeholder = "";
+  try {
+    placeholder = await new Bun.Image(buffer, { maxPixels: MAX_PIXELS }).placeholder();
+  } catch (_) {}
 
   const id = "img_" + nextId++;
   const entry = {
     buffer,
     mime: file.type || "image/png",
     name: file.name || "image.png",
+    format: meta.format || "",
     width: meta.width,
     height: meta.height,
     size: buffer.length,
+    placeholder,
   };
   storeSet(id, entry);
   saveToDisk(id, entry); // persist to disk
 
   return json({
     id,
-    name: file.name || "image.png",
+    name: entry.name,
     width: meta.width,
     height: meta.height,
     size: buffer.length,
     type: file.type,
+    format: meta.format || "",
+    placeholder,
   });
 }
 
@@ -204,9 +282,24 @@ async function handleCompress(id, params) {
   const flipV = params.get("flip") === "true";
   const flipH = params.get("flop") === "true";
   const brightness = parseFloatSafe(params.get("brightness"), 1);
-  const saturation = parseFloatSafe(params.get("saturation"), 1);
+  const greyscale = params.get("greyscale") === "true";
+  const saturation = greyscale ? 0 : parseFloatSafe(params.get("saturation"), 1);
+
+  // Advanced encode options
+  const lossless = params.get("lossless") === "true";
+  const progressive = params.get("progressive") === "true";
+  const compressionLevel = clamp(parseIntSafe(params.get("compressionLevel"), 6), 0, 9);
+  const palette = params.get("palette") === "true";
+  const colors = clamp(parseIntSafe(params.get("colors"), 256), 2, 256);
+  const dither = params.get("dither") === "true";
 
   if (!VALID_FORMATS.has(format)) return error("Unsupported format: " + format);
+  if (!CAPABILITIES[format]) {
+    return error(
+      "Format '" + format + "' is not supported on this platform — try JPEG, PNG, or WebP",
+      501
+    );
+  }
   if (!VALID_FITS.has(fit)) return error("fit must be 'fill' or 'inside'");
   if (filter && !VALID_FILTERS.has(filter)) return error("Invalid filter: " + filter);
   if (rotate && !VALID_ROTATIONS.has(rotate)) return error("rotate must be 90, 180, or 270");
@@ -241,19 +334,34 @@ async function handleCompress(id, params) {
   try {
     switch (format) {
       case "jpeg":
-        out = await img.jpeg({ quality }).bytes();
-        mime = "image/jpeg";
+        out = await img.jpeg({ quality, progressive }).bytes();
         break;
-      case "png":
-        out = await img.png().bytes();
-        mime = "image/png";
+      case "png": {
+        // Only pass palette/dither when indexing; a plain PNG ignores them.
+        const pngOpts = { compressionLevel };
+        if (palette) {
+          pngOpts.palette = true;
+          pngOpts.colors = colors;
+          pngOpts.dither = dither;
+        }
+        out = await img.png(pngOpts).bytes();
         break;
+      }
       case "webp":
-        out = await img.webp({ quality }).bytes();
-        mime = "image/webp";
+        out = await img.webp({ quality, lossless }).bytes();
+        break;
+      case "avif":
+        out = await img.avif({ quality }).bytes();
+        break;
+      case "heic":
+        out = await img.heic({ quality }).bytes();
         break;
     }
+    mime = FORMAT_MIME[format];
   } catch (e) {
+    if (e && e.code === "ERR_IMAGE_FORMAT_UNSUPPORTED") {
+      return error("Format '" + format + "' is not supported on this platform", 501);
+    }
     return error("Encode error: " + e.message);
   }
 
@@ -280,78 +388,90 @@ async function handleCompress(id, params) {
       "X-Compression-Ratio": ratio + "%",
       "X-Compressed-Width": String(compW),
       "X-Compressed-Height": String(compH),
+      "X-Output-Format": format,
       "Cache-Control": "no-store",
       "Content-Disposition": 'attachment; filename="' + downloadName + '"',
     },
   });
 }
 
-// ── Server ──
+// ── Server ───────────────────────────────────────────────────────────────────
 
 const PORT = parseInt(Bun.env.PORT || "3000");
-const dir = import.meta.dir;
+const DEVELOPMENT = Bun.env.NODE_ENV !== "production";
 
-Bun.serve({
+await probeCapabilities();
+
+export const server = Bun.serve({
   port: PORT,
-  async fetch(req) {
-    const url = new URL(req.url);
-    const method = req.method;
+  development: DEVELOPMENT,
+  routes: {
+    "/": index,
 
-    if (method === "OPTIONS") {
+    "/api/capabilities": {
+      GET: () => json(CAPABILITIES),
+    },
+
+    "/api/upload": {
+      POST: handleUpload,
+    },
+
+    "/api/compress/:id": {
+      GET: (req) => handleCompress(req.params.id, new URL(req.url).searchParams),
+    },
+
+    "/api/info/:id": {
+      GET: (req) => {
+        const stored = store.get(req.params.id);
+        if (!stored) return error("Image not found", 404);
+        return json({
+          id: req.params.id,
+          name: stored.name,
+          width: stored.width,
+          height: stored.height,
+          size: stored.size,
+          mime: stored.mime,
+          format: stored.format || "",
+        });
+      },
+    },
+
+    "/api/placeholder/:id": {
+      GET: (req) => {
+        const stored = store.get(req.params.id);
+        if (!stored) return error("Image not found", 404);
+        return json({ placeholder: stored.placeholder || "" });
+      },
+    },
+
+    "/api/original/:id": {
+      GET: (req) => {
+        const stored = store.get(req.params.id);
+        if (!stored) return error("Image not found", 404);
+        return new Response(stored.buffer, {
+          headers: {
+            "Content-Type": stored.mime,
+            "Cache-Control": "no-store",
+          },
+        });
+      },
+    },
+  },
+
+  fetch(req) {
+    // CORS preflight + JSON 404 fallback for unmatched routes.
+    if (req.method === "OPTIONS") {
       return new Response(null, { headers: corsHeaders() });
     }
-
-    if (url.pathname === "/api/upload" && method === "POST") {
-      return await handleUpload(req);
-    }
-
-    const compressMatch = url.pathname.match(/^\/api\/compress\/(.+)$/);
-    if (compressMatch && method === "GET") {
-      return await handleCompress(compressMatch[1], url.searchParams);
-    }
-
-    const infoMatch = url.pathname.match(/^\/api\/info\/(.+)$/);
-    if (infoMatch && method === "GET") {
-      const stored = store.get(infoMatch[1]);
-      if (!stored) return error("Image not found", 404);
-      return json({
-        id: infoMatch[1],
-        name: stored.name,
-        width: stored.width,
-        height: stored.height,
-        size: stored.size,
-        mime: stored.mime,
-      });
-    }
-
-    const origMatch = url.pathname.match(/^\/api\/original\/(.+)$/);
-    if (origMatch && method === "GET") {
-      const stored = store.get(origMatch[1]);
-      if (!stored) return error("Image not found", 404);
-      return new Response(stored.buffer, {
-        headers: {
-          "Content-Type": stored.mime,
-          "Cache-Control": "no-store",
-        },
-      });
-    }
-
-    if (url.pathname === "/" || url.pathname === "/index.html") {
-      const htmlFile = Bun.file(dir + "/index.html");
-      return new Response(htmlFile, {
-        headers: { "Content-Type": "text/html; charset=utf-8" },
-      });
-    }
-
-    return new Response("Not Found", { status: 404 });
+    return error("Not Found", 404);
   },
 });
 
 console.log("");
-console.log("  Bun Image Compress running at http://localhost:" + PORT);
-console.log("  Formats: JPEG, PNG, WebP | Fit: fill, inside");
-console.log("  Filters: lanczos3, mitchell, nearest, box, bilinear, cubic, mks2013, mks2021");
-console.log("  Transforms: rotate (90/180/270), flip, flop, modulate (brightness, saturation)");
+console.log("  Bun Image Tools running at http://localhost:" + server.port);
+console.log("  Encoders: JPEG, PNG, WebP" + (CAPABILITIES.avif ? ", AVIF" : "") + (CAPABILITIES.heic ? ", HEIC" : ""));
+console.log("  Fit: fill, inside | Filters: lanczos3, mitchell, nearest, box, bilinear, cubic, mks2013, mks2021");
+console.log("  Transforms: rotate (90/180/270), flip, flop, modulate (brightness, saturation, greyscale)");
 console.log("  Storage: persistent on disk at " + UPLOADS_DIR);
-console.log("  Images expire after 30 min");
+console.log("  Images expire after 30 min | mode: " + (DEVELOPMENT ? "development" : "production"));
 console.log("");
